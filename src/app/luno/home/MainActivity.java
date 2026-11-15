@@ -144,7 +144,8 @@ public class MainActivity extends Activity {
         pf.addDataScheme("package");
         registerReceiver(packages, pf);
         watchNetwork();
-        nextPhoto();
+        listMode = getPreferences(MODE_PRIVATE).getBoolean("list", false);
+        applyMode();
     }
 
     @Override
@@ -157,7 +158,8 @@ public class MainActivity extends Activity {
         updateClock();
         // Photos change only while Home is on screen; catch up if one is due.
         long since = SystemClock.elapsedRealtime() - photoAt;
-        if (photoAt != 0 && since >= photoMs) nextPhoto();
+        if (listMode) { /* no photo in the apps-list mode */ }
+        else if (photoAt != 0 && since >= photoMs) nextPhoto();
         else {
             if (!photoLoaded && photoIndex >= 0) loadPhoto(photoIndex);
             handler.postDelayed(nextPhotoTask, Math.max(1000, photoMs - since));
@@ -165,7 +167,16 @@ public class MainActivity extends Activity {
         android.content.pm.ChangedPackages changed = getPackageManager().getChangedPackages(packageSeq);
         if (changed != null) buildApps();
         reapplyProcessLimit();
-        if (sheet.getVisibility() != View.VISIBLE && popup == null) focusDock(lastDockIndex);
+        if (popup == null && (listMode ? !sheetTiles.contains(getCurrentFocus()) : sheet.getVisibility() != View.VISIBLE)) {
+            focusDock(lastDockIndex);
+        }
+        if (listMode) {
+            // Back on Home: the focused tile hasn't changed, so light it again (released in onStop).
+            handler.post(() -> {
+                View f = getCurrentFocus();
+                if (f != null && sheetTiles.contains(f) && f.getTag() instanceof App) showGlow(f, (App) f.getTag());
+            });
+        }
     }
 
     @Override
@@ -180,7 +191,8 @@ public class MainActivity extends Activity {
     protected void onStop() {
         super.onStop();
         releasePhoto();
-        if (sheet.getVisibility() == View.VISIBLE) {
+        hideGlow();
+        if (!listMode && sheet.getVisibility() == View.VISIBLE) {
             sheet.setVisibility(View.GONE);
             homeContent(true);
         }
@@ -202,7 +214,7 @@ public class MainActivity extends Activity {
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
         dismissPopup();
-        if (sheet.getVisibility() == View.VISIBLE) closeSheet(false);
+        if (!listMode && sheet.getVisibility() == View.VISIBLE) closeSheet(false);
         focusDock(0);
     }
 
@@ -210,7 +222,7 @@ public class MainActivity extends Activity {
     public void onBackPressed() {
         if (popup != null) dismissPopup();
         else if (movingPkg != null) endMove();
-        else if (sheet.getVisibility() == View.VISIBLE) closeSheet(true);
+        else if (!listMode && sheet.getVisibility() == View.VISIBLE) closeSheet(true);
         // Home has nowhere to go back to.
     }
 
@@ -241,6 +253,11 @@ public class MainActivity extends Activity {
         wallFront = photoLayer();
         root.addView(wallBack, full());
         root.addView(wallFront, full());
+        // Apps-list home: the focused banner's colour washed over the lower screen (Glow), under everything else.
+        glowView = new ImageView(this);
+        glowView.setScaleType(ImageView.ScaleType.FIT_XY);
+        glowView.setAlpha(0f);
+        root.addView(glowView, full());
         // The shade for the clock and dock is painted into each photo (see nextPhoto): on this TV's
         // GPU every extra full-screen layer costs frames.
 
@@ -298,9 +315,18 @@ public class MainActivity extends Activity {
         return root;
     }
 
+    private void setBarEdges(int left, int right) {
+        FrameLayout.LayoutParams cl = (FrameLayout.LayoutParams) clockBox.getLayoutParams();
+        FrameLayout.LayoutParams tl = (FrameLayout.LayoutParams) topBar.getLayoutParams();
+        cl.leftMargin = left;
+        tl.rightMargin = right;
+        clockBox.setLayoutParams(cl);
+        topBar.setLayoutParams(tl);
+    }
+
     /** The top bar's left and right edges follow the dock's first and last cards. */
     private void alignTopBar() {
-        if (dock.getChildCount() == 0 || topBar == null) return;
+        if (listMode || dock.getChildCount() == 0 || topBar == null) return;
         int left = dock.getLeft() + dock.getPaddingLeft();
         int right = root.getWidth() - (dock.getRight() - dock.getPaddingRight());
         FrameLayout.LayoutParams cl = (FrameLayout.LayoutParams) clockBox.getLayoutParams();
@@ -366,18 +392,43 @@ public class MainActivity extends Activity {
         v.setFocusable(true);
         v.setClickable(true);
         GradientDrawable bg = new GradientDrawable();
-        bg.setCornerRadius(radius);
-        bg.setColor(0x59000000);
-        bg.setStroke(dp(1), 0x33FFFFFF);
         v.setBackground(bg);
         v.setOnClickListener(x -> action.run());
+        Object[] part = {v, bg, icon, label, radius};
+        topParts.add(part);
+        paintTop(part, false);
         v.setOnFocusChangeListener((x, has) -> {
-            bg.setColor(has ? 0xF7FFFFFF : 0x59000000);
-            bg.setStroke(dp(1), has ? 0x00FFFFFF : 0x33FFFFFF);
-            if (icon != null) icon.setColorFilter(has ? 0xFF111114 : Color.WHITE);
-            if (label != null) label.setTextColor(has ? 0xFF111114 : Color.WHITE);
+            paintTop(part, has);
+            if (has && listMode) {
+                // The bottom title names the focused control, as it does the focused app.
+                sheetTitle.setText(x == wifiChip ? "Network" : x == featuresBtn ? "Features" : "Settings");
+                hideGlow();
+            }
             x.animate().scaleX(has ? 1.08f : 1f).scaleY(has ? 1.08f : 1f).setDuration(160).start();
         });
+    }
+
+    private final List<Object[]> topParts = new ArrayList<>(); // {view, bg, icon, label, radius}
+
+    /**
+     * The top controls look like the app tiles: a dark card with the banners' corners and a white
+     * ring when focused (both homes).
+     */
+    private void paintTop(Object[] part, boolean has) {
+        GradientDrawable bg = (GradientDrawable) part[1];
+        ImageView icon = (ImageView) part[2];
+        TextView label = (TextView) part[3];
+        // Both homes: the tiles' own look, a dark card with the banners' corners, a white ring on focus.
+        bg.setCornerRadius(dp(12));
+        // Photo home: see-through so the photo shows behind; apps list: the tiles' solid card.
+        bg.setColor(listMode ? 0xFF24262B : 0x8C24262B);
+        bg.setStroke(has ? dp(2.5f) : 0, Color.WHITE);
+        if (icon != null) icon.setColorFilter(Color.WHITE);
+        if (label != null) label.setTextColor(Color.WHITE);
+    }
+
+    private void repaintTop() {
+        for (Object[] part : topParts) paintTop(part, ((View) part[0]).isFocused());
     }
 
     private View buildSheet() {
@@ -387,6 +438,7 @@ public class MainActivity extends Activity {
         sheet.setClickable(true);
 
         TextView title = text(22, sansMedium(), Color.WHITE);
+        sheetTitle = title;
         title.setText("Apps");
         sheet.addView(title, lp(-2, -2, Gravity.TOP | Gravity.START, dp(64), dp(40), 0, 0));
 
@@ -446,9 +498,29 @@ public class MainActivity extends Activity {
             t.setNextFocusUpId(featuresBtn.getId());
         }
 
-        sheetApps = rest;
+        if (listMode) {
+            // Everything in one list: the saved order, else the dock first and then the rest.
+            List<App> all = new ArrayList<>(inDock);
+            all.addAll(rest);
+            String saved = getPreferences(MODE_PRIVATE).getString("list_order", null);
+            if (saved != null) {
+                List<String> order = Arrays.asList(saved.split(","));
+                List<App> base = all, sorted = new ArrayList<>(all);
+                int n = base.size();
+                Collections.sort(sorted, (x, y) -> {
+                    int a = order.indexOf(x.pkg), b = order.indexOf(y.pkg);
+                    if (a < 0) a = Integer.MAX_VALUE - n + base.indexOf(x); // new apps at the end
+                    if (b < 0) b = Integer.MAX_VALUE - n + base.indexOf(y);
+                    return Integer.compare(a, b);
+                });
+                all = sorted;
+            }
+            sheetApps = all;
+        } else {
+            sheetApps = rest;
+        }
         releaseSheet();
-        if (sheet.getVisibility() == View.VISIBLE) buildSheet(rest);
+        if (sheet.getVisibility() == View.VISIBLE) buildSheet(sheetApps);
         lastDockIndex = Math.min(lastDockIndex, Math.max(0, dockTiles.size() - 1));
     }
 
@@ -456,7 +528,7 @@ public class MainActivity extends Activity {
     private void buildSheet(List<App> rest) {
         sheetGrid.removeAllViews();
         sheetTiles.clear();
-        int cols = 6, gap = dp(18);
+        int cols = sheetCols(), gap = dp(listMode ? 24 : 18);
         int width = getResources().getDisplayMetrics().widthPixels - 2 * dp(64);
         int tileW = (width - (cols - 1) * gap) / cols;
         LinearLayout row = null;
@@ -474,7 +546,11 @@ public class MainActivity extends Activity {
             t.setNextFocusLeftId(col == 0 ? t.getId() : sheetTiles.get(i - 1).getId());
             t.setNextFocusRightId(col == cols - 1 || i == sheetTiles.size() - 1 ? t.getId() : sheetTiles.get(i + 1).getId());
             t.setNextFocusUpId(i < cols ? t.getId() : sheetTiles.get(i - cols).getId());
-            t.setNextFocusDownId(i + cols < sheetTiles.size() ? sheetTiles.get(i + cols).getId() : t.getId());
+            // Down: the app below; where the next row is shorter, its last (nearest) app.
+            int n = sheetTiles.size(), below = i + cols;
+            boolean nextRow = (i / cols + 1) * cols < n;
+            t.setNextFocusDownId(below < n ? sheetTiles.get(below).getId()
+                    : nextRow ? sheetTiles.get(n - 1).getId() : t.getId());
         }
     }
 
@@ -516,7 +592,8 @@ public class MainActivity extends Activity {
 
     /** The widest a card is ever drawn: a focused dock card or a focused sheet card. */
     private int artWidth() {
-        int sheetW = (getResources().getDisplayMetrics().widthPixels - 2 * dp(64) - 5 * dp(18)) / 6;
+        int cols = sheetCols(), gap = dp(listMode ? 24 : 18);
+        int sheetW = (getResources().getDisplayMetrics().widthPixels - 2 * dp(64) - (cols - 1) * gap) / cols;
         return Math.max(Math.round(dp(DOCK_TILE_W) * DOCK_FOCUS), Math.round(sheetW * 1.08f));
     }
 
@@ -547,13 +624,15 @@ public class MainActivity extends Activity {
         // Focus ring: a crisp white edge inside the card's rounded outline, shown only when focused.
         GradientDrawable ring = new GradientDrawable();
         ring.setCornerRadius(radius);
-        ring.setStroke(dp(2.5f), Color.WHITE);
-        ring.setAlpha(0);
+        // Apps list: a faint light edge so dark banners stand out from the dark background.
+        boolean edge = listMode && !inDock;
+        ring.setStroke(edge ? dp(1) : dp(2.5f), edge ? 0x38FFFFFF : Color.WHITE);
+        ring.setAlpha(edge ? 255 : 0);
         card.setForeground(ring);
         box.addView(card, new LinearLayout.LayoutParams(w, w * 9 / 16));
 
         TextView name = null;
-        if (!inDock) {
+        if (!inDock && !listMode) { // the apps list shows one title at the top instead
             name = text(12, sans(), 0xB3FFFFFF);
             name.setText(app.label);
             name.setSingleLine(true);
@@ -572,13 +651,18 @@ public class MainActivity extends Activity {
             float s = has ? (inDock ? DOCK_FOCUS : 1.08f) : 1f;
             v.animate().scaleX(s).scaleY(s)
                     .setInterpolator(new DecelerateInterpolator(2f)).setDuration(has ? 180 : 140).start();
-            ring.setAlpha(has ? 255 : 0);
+            if (edge) ring.setStroke(has ? dp(2.5f) : dp(1), has ? Color.WHITE : 0x38FFFFFF);
+            else ring.setAlpha(has ? 255 : 0);
             if (label != null) label.setTextColor(has ? Color.WHITE : 0xB3FFFFFF);
             if (inDock) {
                 if (has) lastDockIndex = index; // no name over dock apps: the banners carry it
                 // After focus settles: dim the other dock apps while one is focused, else none.
                 handler.post(this::updateDockDim);
             } else if (has) {
+                if (listMode) {
+                    sheetTitle.setText(app.label);
+                    showGlow(v, app);
+                }
                 scrollSheetTo(box);
             }
         });
@@ -589,7 +673,8 @@ public class MainActivity extends Activity {
                 showActions(v, new String[]{"Move", "Remove from dock"},
                         new Runnable[]{() -> startMove(app.pkg), () -> removeFromDock(app.pkg)});
             } else {
-                showActions(v, new String[]{"Move", "Add to dock"},
+                if (listMode) showActions(v, new String[]{"Move"}, new Runnable[]{() -> startMove(app.pkg)});
+                else showActions(v, new String[]{"Move", "Add to dock"},
                         new Runnable[]{() -> startMove(app.pkg), () -> addToDock(app.pkg)});
             }
             return true;
@@ -609,8 +694,9 @@ public class MainActivity extends Activity {
                 if (longPressKey(v, code, ev)) return true;
                 if (movingPkg != null) return moveKey(code, ev);
                 if (code == KeyEvent.KEYCODE_DPAD_UP && ev.getAction() == KeyEvent.ACTION_DOWN
-                        && sheetTiles.indexOf(v) < 6) {
-                    closeSheet(true);
+                        && sheetTiles.indexOf(v) < sheetCols()) {
+                    if (listMode) featuresBtn.requestFocus();
+                    else closeSheet(true);
                     return true;
                 }
                 return false;
@@ -648,7 +734,104 @@ public class MainActivity extends Activity {
     }
 
 
+    /** Photo home (photo, dock, apps one press down) or the apps list (no photo, all apps). */
+    private void applyMode() {
+        FrameLayout.LayoutParams sl = (FrameLayout.LayoutParams) sheetScroll.getLayoutParams();
+        if (listMode) {
+            handler.removeCallbacks(nextPhotoTask);
+            releasePhoto();
+            root.setBackgroundColor(0xFF0E1013);
+            dock.setVisibility(View.GONE);
+            // One title above the grid: the focused app's name, large.
+            sheetTitle.setVisibility(View.VISIBLE);
+            sheetTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 28);
+            setTitleBottom(dp(DOCK_BOTTOM + 12)); // bottom left, the same margin as the top bar's
+            sheet.setBackgroundColor(Color.TRANSPARENT);
+            sl.topMargin = dp(DOCK_BOTTOM + BAR_H + 34); // under the top bar
+            sl.bottomMargin = dp(DOCK_BOTTOM + 12 + 38 + 16); // above the title
+            // No dock to align to: the top bar lines up with the grid's edges instead.
+            setBarEdges(dp(64), dp(64));
+            sheet.animate().cancel();
+            sheet.setAlpha(1f);
+            sheet.setTranslationY(0);
+            sheet.setVisibility(View.VISIBLE);
+            clockBox.setAlpha(1f);
+        } else {
+            hideGlow();
+            sheet.setVisibility(View.GONE);
+            sheetTitle.setVisibility(View.VISIBLE);
+            sheetTitle.setText("Apps");
+            sheetTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 22);
+            setTitleTop(dp(40));
+            sl.bottomMargin = 0;
+            sheet.setBackgroundColor(0xFA0E1013);
+            sl.topMargin = dp(84);
+            dock.setVisibility(View.VISIBLE);
+            dock.post(this::alignTopBar);
+            homeContent(true);
+            nextPhoto();
+        }
+        sheetScroll.setLayoutParams(sl);
+        repaintTop();
+        buildApps();
+        focusDock(0);
+    }
+
+    /** Apps per row: 4 large tiles in the apps-list home, 6 in the photo home's sheet. */
+    private int sheetCols() {
+        return 6;
+    }
+
+    /** Lights the background behind the focused banner in its colour; crossfades on each move. */
+    private void showGlow(View card, App app) {
+        if (app.pkg.equals(glowPkg)) return;
+        glowPkg = app.pkg;
+        Drawable art = artFor(app);
+        Bitmap banner = art instanceof android.graphics.drawable.BitmapDrawable
+                ? ((android.graphics.drawable.BitmapDrawable) art).getBitmap() : null;
+        // After the grid has scrolled to the card, so its place on screen is final.
+        card.postDelayed(() -> {
+            if (!listMode || !app.pkg.equals(glowPkg)) return;
+            int[] at = new int[2];
+            card.getLocationInWindow(at);
+            android.util.DisplayMetrics dm = getResources().getDisplayMetrics();
+            Bitmap g = Glow.render(banner, at[0] + card.getWidth() * card.getScaleX() / 2f,
+                    at[1] + card.getHeight() * card.getScaleY() / 2f, dm.widthPixels, dm.heightPixels);
+            glowView.animate().cancel();
+            glowView.setAlpha(Math.min(glowView.getAlpha(), 0.35f));
+            glowView.setImageBitmap(g); // the previous one is dropped with it
+            glowView.animate().alpha(1f).setDuration(260).start();
+        }, 120);
+    }
+
+    private void hideGlow() {
+        glowPkg = null;
+        glowView.animate().cancel();
+        glowView.setAlpha(0f);
+        glowView.setImageDrawable(null);
+    }
+
+    private void setTitleBottom(int bottom) {
+        FrameLayout.LayoutParams tl = (FrameLayout.LayoutParams) sheetTitle.getLayoutParams();
+        tl.gravity = Gravity.BOTTOM | Gravity.START;
+        tl.topMargin = 0;
+        tl.bottomMargin = bottom;
+        sheetTitle.setLayoutParams(tl);
+    }
+
+    private void setTitleTop(int top) {
+        FrameLayout.LayoutParams tl = (FrameLayout.LayoutParams) sheetTitle.getLayoutParams();
+        tl.gravity = Gravity.TOP | Gravity.START;
+        tl.bottomMargin = 0;
+        tl.topMargin = top;
+        sheetTitle.setLayoutParams(tl);
+    }
+
     private void focusDock(int i) {
+        if (listMode) {
+            if (!sheetTiles.isEmpty()) sheetTiles.get(0).requestFocus();
+            return;
+        }
         if (dockTiles.isEmpty()) return;
         dockTiles.get(Math.max(0, Math.min(i, dockTiles.size() - 1))).requestFocus();
     }
@@ -684,7 +867,8 @@ public class MainActivity extends Activity {
 
     private void scrollSheetTo(View tileBox) {
         View row = (View) tileBox.getParent();
-        int target = row.getTop() - dp(40);
+        // Apps list: scroll only as far as needed to show the row whole; sheet: row near the top.
+        int target = listMode ? row.getBottom() + dp(40) - sheetScroll.getHeight() : row.getTop() - dp(40);
         sheetScroll.smoothScrollTo(0, Math.max(0, target));
     }
 
@@ -935,6 +1119,30 @@ public class MainActivity extends Activity {
         PopupWindow pw = new PopupWindow(list, width, ViewGroup.LayoutParams.WRAP_CONTENT, true);
 
         List<TextView> rows = new ArrayList<>();
+        TextView homeRow = text(14, sans(), Color.WHITE);
+        homeRow.setSingleLine(true);
+        homeRow.setGravity(Gravity.CENTER_VERTICAL);
+        homeRow.setPadding(dp(16), 0, dp(16), 0);
+        homeRow.setFocusable(true);
+        homeRow.setClickable(true);
+        homeRow.setId(View.generateViewId());
+        homeRow.setText("Home  \u00b7  " + (listMode ? "Apps list" : "Photo"));
+        GradientDrawable homeBg = new GradientDrawable();
+        homeBg.setCornerRadius(dp(13));
+        homeBg.setColor(Color.TRANSPARENT);
+        homeRow.setBackground(homeBg);
+        homeRow.setOnFocusChangeListener((v, has) -> {
+            homeBg.setColor(has ? 0xF7FFFFFF : Color.TRANSPARENT);
+            homeRow.setTextColor(has ? 0xFF111114 : Color.WHITE);
+        });
+        homeRow.setOnClickListener(v -> {
+            dismissPopup();
+            listMode = !listMode;
+            getPreferences(MODE_PRIVATE).edit().putBoolean("list", listMode).apply();
+            applyMode();
+        });
+        list.addView(homeRow, new LinearLayout.LayoutParams(-1, dp(44)));
+        rows.add(homeRow);
         for (int i = 0; i < pkgs.length && i < labels.length; i++) {
             String pkg = pkgs[i], label = labels[i];
             if (!present(pkg)) continue;
@@ -984,7 +1192,11 @@ public class MainActivity extends Activity {
     /** Most apps the dock shows (more don't fit across a 1080p screen at this card size). */
     static final int DOCK_MAX = 6;
     private String movingPkg;
-    private TextView moveHint, sheetHint;
+    private TextView moveHint, sheetHint, sheetTitle;
+    /** Home without the photo: all apps in one grid (Features > Home). */
+    private boolean listMode;
+    private ImageView glowView;
+    private String glowPkg;
     private boolean movingInSheet;
 
     private boolean longFired;
@@ -1036,7 +1248,7 @@ public class MainActivity extends Activity {
             if (sheetHint == null) {
                 sheetHint = text(15, sansMedium(), 0xD9FFFFFF);
                 sheetHint.setText("\u25C0 \u25B6 \u25B2 \u25BC  to move   \u00b7   OK when done");
-                sheet.addView(sheetHint, lp(-2, -2, Gravity.TOP | Gravity.END, 0, dp(48), dp(64), 0));
+                sheet.addView(sheetHint, lp(-2, -2, Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL, 0, 0, 0, dp(36)));
             }
             sheetHint.setVisibility(View.VISIBLE);
             int i = sheetIndex(pkg);
@@ -1055,7 +1267,7 @@ public class MainActivity extends Activity {
 
     /** Moves the app within the apps list (arrows, one place or one row) and saves the order. */
     private boolean moveInSheet(int code) {
-        int from = sheetIndex(movingPkg), cols = 6, to;
+        int from = sheetIndex(movingPkg), cols = sheetCols(), to;
         if (code == KeyEvent.KEYCODE_DPAD_LEFT) to = from - 1;
         else if (code == KeyEvent.KEYCODE_DPAD_RIGHT) to = from + 1;
         else if (code == KeyEvent.KEYCODE_DPAD_UP) to = from - cols;
@@ -1064,8 +1276,12 @@ public class MainActivity extends Activity {
         List<String> order = new ArrayList<>();
         for (App a : sheetApps) order.add(a.pkg);
         order.add(to, order.remove(from));
-        appsFirst = order.toArray(new String[0]);
-        getPreferences(MODE_PRIVATE).edit().putString("apps", TextUtils.join(",", appsFirst)).apply();
+        if (listMode) {
+            getPreferences(MODE_PRIVATE).edit().putString("list_order", TextUtils.join(",", order)).apply();
+        } else {
+            appsFirst = order.toArray(new String[0]);
+            getPreferences(MODE_PRIVATE).edit().putString("apps", TextUtils.join(",", appsFirst)).apply();
+        }
         buildApps(); // rebuilds the open sheet in the new order
         sheetTiles.get(to).requestFocus();
         return true;
