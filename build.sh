@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Builds build/ambient.apk with the bare SDK tools (no Gradle).
+# Builds build/luno.apk with the bare SDK tools (no Gradle).
 #   ./build.sh            build
 #   ./build.sh --install  build, install on the TV and make it the home screen
 # Needs JDK 17 (JAVA_HOME) and the Android SDK with build-tools 34.0.0 and platform 34 (ANDROID_HOME).
@@ -27,15 +27,15 @@ cp "$B/base.apk" "$B/unsigned.apk"
 (cd "$B/dex" && zip -q -u ../unsigned.apk classes.dex)
 "$BT/zipalign" -f 4 "$B/unsigned.apk" "$B/aligned.apk"
 [ -f debug.keystore ] || keytool -genkeypair -keystore debug.keystore -storepass android -keypass android \
-  -alias ambient -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Ambient" >/dev/null 2>&1
-"$BT/apksigner" sign --ks debug.keystore --ks-pass pass:android --out "$B/ambient.apk" "$B/aligned.apk"
-echo "Built $B/ambient.apk ($(wc -c < "$B/ambient.apk") bytes)"
+  -alias luno -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Luno" >/dev/null 2>&1
+"$BT/apksigner" sign --ks debug.keystore --ks-pass pass:android --out "$B/luno.apk" "$B/aligned.apk"
+echo "Built $B/luno.apk ($(wc -c < "$B/luno.apk") bytes)"
 [ "${1:-}" = "--install" ] || exit 0
 [ -n "$TV" ] || { echo "Set TV=<ip>:5555 to install, e.g. TV=192.168.1.20:5555 ./build.sh --install" >&2; exit 1; }
 
 adb connect "$TV" >/dev/null
-adb -s "$TV" install -r "$B/ambient.apk"
-adb -s "$TV" shell cmd package set-home-activity --user 0 app.ambient.home/.MainActivity
-adb -s "$TV" shell am force-stop app.ambient.home
+adb -s "$TV" install -r "$B/luno.apk"
+adb -s "$TV" shell cmd package set-home-activity --user 0 app.luno.home/.MainActivity
+adb -s "$TV" shell am force-stop app.luno.home
 adb -s "$TV" shell input keyevent KEYCODE_HOME
 echo "Installed and set as home."

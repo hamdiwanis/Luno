@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Ambient's settings. Edit, then run build.sh with the install option. -->
+<!-- Luno's settings. Edit, then run build.sh with the install option. -->
 <resources>
     <!-- The dock, left to right. Apps that aren't installed are skipped. -->
     <string-array name="dock_apps">

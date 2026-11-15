@@ -1,4 +1,4 @@
-package app.ambient.home;
+package app.luno.home;
 
 import android.app.Activity;
 import android.content.BroadcastReceiver;
@@ -56,7 +56,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Ambient: a photo-first home screen for Android TV. A full-bleed photo that changes every few
+ * Luno: a photo-first home screen for Android TV. A full-bleed photo that changes every few
  * minutes, a large clock on the left, a compact floating dock, and every other app one press down.
  * Built to be light: no live blur, the photo released while an app is open, only scale and fade animate,
  * nothing runs while another app is in front.

@@ -1,4 +1,4 @@
-package app.ambient.home;
+package app.luno.home;
 
 import android.content.Context;
 import android.util.Base64;
@@ -48,7 +48,7 @@ final class LocalAdb {
             DataInputStream in = new DataInputStream(s.getInputStream());
             OutputStream out = s.getOutputStream();
 
-            send(out, CNXN, 0x01000000, 4096, "host::ambient\0".getBytes(StandardCharsets.UTF_8));
+            send(out, CNXN, 0x01000000, 4096, "host::luno\0".getBytes(StandardCharsets.UTF_8));
             boolean signed = false;
             while (true) {
                 Msg m = read(in);
@@ -123,7 +123,7 @@ final class LocalAdb {
         ByteBuffer b = ByteBuffer.allocate(524).order(ByteOrder.LITTLE_ENDIAN);
         b.putInt(64).putInt(n0inv.intValue()).put(littleEndian(n)).put(littleEndian(rr))
                 .putInt(pub.getPublicExponent().intValue());
-        String s = Base64.encodeToString(b.array(), Base64.NO_WRAP) + " ambient@launcher\0";
+        String s = Base64.encodeToString(b.array(), Base64.NO_WRAP) + " luno@launcher\0";
         return s.getBytes(StandardCharsets.UTF_8);
     }
 

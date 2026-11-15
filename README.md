@@ -31,7 +31,7 @@ The Features menu, network name and background limit use the TV's own adb (netwo
 Needs JDK 17 and the Android SDK (build-tools 34.0.0, platform 34). No Gradle.
 
 ```bash
-./build.sh                                  # build build/ambient.apk
+./build.sh                                  # build build/luno.apk
 TV=192.168.1.20:5555 ./build.sh --install   # install on the TV and make it the home screen
 ```
 

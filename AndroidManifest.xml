@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="app.ambient.home">
+    package="app.luno.home">
 
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!-- The TV's own adb on 127.0.0.1:5555: Features switches, Wi-Fi name, background limit. -->
@@ -20,12 +20,12 @@
     </queries>
 
     <application
-        android:label="Ambient"
+        android:label="Luno"
         android:icon="@drawable/ic_home"
         android:banner="@drawable/ic_home"
         android:allowBackup="false"
         android:hardwareAccelerated="true"
-        android:theme="@style/Ambient">
+        android:theme="@style/Luno">
 
         <activity
             android:name=".MainActivity"
