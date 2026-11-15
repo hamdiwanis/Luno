@@ -192,6 +192,7 @@ public class MainActivity extends Activity {
         super.onStop();
         releasePhoto();
         hideGlow();
+        washCache.clear();
         if (!listMode && sheet.getVisibility() == View.VISIBLE) {
             sheet.setVisibility(View.GONE);
             homeContent(true);
@@ -254,6 +255,11 @@ public class MainActivity extends Activity {
         root.addView(wallBack, full());
         root.addView(wallFront, full());
         // Apps-list home: the focused banner's colour washed over the lower screen (Glow), under everything else.
+        // Two layers so a new wash crossfades over the old one.
+        glowBack = new ImageView(this);
+        glowBack.setScaleType(ImageView.ScaleType.FIT_XY);
+        glowBack.setAlpha(0f);
+        root.addView(glowBack, full());
         glowView = new ImageView(this);
         glowView.setScaleType(ImageView.ScaleType.FIT_XY);
         glowView.setAlpha(0f);
@@ -401,8 +407,8 @@ public class MainActivity extends Activity {
             paintTop(part, has);
             if (has && listMode) {
                 // The bottom title names the focused control, as it does the focused app.
-                sheetTitle.setText(x == wifiChip ? "Network" : x == featuresBtn ? "Features" : "Settings");
-                hideGlow();
+                showTitle(x == wifiChip ? "Network" : x == featuresBtn ? "Features" : "Settings");
+                fadeGlowOut();
             }
             x.animate().scaleX(has ? 1.08f : 1f).scaleY(has ? 1.08f : 1f).setDuration(160).start();
         });
@@ -660,7 +666,7 @@ public class MainActivity extends Activity {
                 handler.post(this::updateDockDim);
             } else if (has) {
                 if (listMode) {
-                    sheetTitle.setText(app.label);
+                    showTitle(app.label);
                     showGlow(v, app);
                 }
                 scrollSheetTo(box);
@@ -786,29 +792,121 @@ public class MainActivity extends Activity {
     private void showGlow(View card, App app) {
         if (app.pkg.equals(glowPkg)) return;
         glowPkg = app.pkg;
-        Drawable art = artFor(app);
-        Bitmap banner = art instanceof android.graphics.drawable.BitmapDrawable
-                ? ((android.graphics.drawable.BitmapDrawable) art).getBitmap() : null;
-        // After the grid has scrolled to the card, so its place on screen is final.
-        card.postDelayed(() -> {
-            if (!listMode || !app.pkg.equals(glowPkg)) return;
-            int[] at = new int[2];
-            card.getLocationInWindow(at);
-            android.util.DisplayMetrics dm = getResources().getDisplayMetrics();
-            Bitmap g = Glow.render(banner, at[0] + card.getWidth() * card.getScaleX() / 2f,
-                    at[1] + card.getHeight() * card.getScaleY() / 2f, dm.widthPixels, dm.heightPixels);
-            glowView.animate().cancel();
-            glowView.setAlpha(Math.min(glowView.getAlpha(), 0.35f));
-            glowView.setImageBitmap(g); // the previous one is dropped with it
-            glowView.animate().alpha(1f).setDuration(260).start();
-        }, 120);
+        // Wait until focus rests: moving quickly across tiles glides to the final colour instead of
+        // starting (and cutting) a fade for every tile passed on the way.
+        handler.removeCallbacks(glowSettle);
+        handler.postDelayed(glowSettle, 150);
+    }
+
+    private final Runnable glowSettle = this::settleGlow;
+
+    private void settleGlow() {
+        String pkg = glowPkg;
+        if (!listMode || pkg == null) return;
+        Bitmap g = washCache.get(pkg);
+        if (g != null) crossfadeGlow(g, pkg);
+        else prerenderWashes(); // not drawn yet: it's drawn next and faded in when ready
+    }
+
+    /** ~130 KB each, a dozen apps at most: kept while Home shows, dropped in onStop. */
+    private final java.util.Map<String, Bitmap> washCache = new java.util.HashMap<>();
+    private boolean washRendering;
+
+    /**
+     * Draws the washes of every app in the list on one background thread, the focused app first,
+     * so moving between tiles never waits for one.
+     */
+    private void prerenderWashes() {
+        if (washRendering || !listMode) return;
+        List<App> todo = new ArrayList<>();
+        for (App a : sheetApps) {
+            if (washCache.containsKey(a.pkg)) continue;
+            if (a.pkg.equals(glowPkg)) todo.add(0, a); else todo.add(a);
+        }
+        if (todo.isEmpty()) return;
+        washRendering = true;
+        List<Bitmap> banners = new ArrayList<>();
+        for (App a : todo) {
+            Drawable art = artFor(a);
+            banners.add(art instanceof android.graphics.drawable.BitmapDrawable
+                    ? ((android.graphics.drawable.BitmapDrawable) art).getBitmap() : null);
+        }
+        android.util.DisplayMetrics dm = getResources().getDisplayMetrics();
+        int sw = dm.widthPixels, sh = dm.heightPixels;
+        Thread t = new Thread(() -> {
+            for (int i = 0; i < todo.size(); i++) {
+                Bitmap g = Glow.render(banners.get(i), 0, 0, sw, sh);
+                String pkg = todo.get(i).pkg;
+                runOnUiThread(() -> {
+                    if (g == null || !listMode) return;
+                    washCache.put(pkg, g);
+                    if (pkg.equals(glowPkg) && glowShown == null) crossfadeGlow(g, pkg);
+                });
+            }
+            runOnUiThread(() -> washRendering = false);
+        }, "wash");
+        t.setPriority(Thread.MIN_PRIORITY);
+        t.start();
+    }
+
+    /** The package whose wash is on screen (or fading in). */
+    private String glowShown;
+
+    /**
+     * A true crossfade on GPU layers: the old wash fades out while the new one fades in. If a fade
+     * is still running, the more visible layer is the one kept and faded out, so nothing jumps.
+     */
+    private void crossfadeGlow(Bitmap g, String pkg) {
+        if (!pkg.equals(glowPkg) || pkg.equals(glowShown)) return;
+        glowShown = pkg;
+        glowView.animate().cancel();
+        glowBack.animate().cancel();
+        ImageView out = glowView.getAlpha() >= glowBack.getAlpha() ? glowView : glowBack;
+        ImageView in = out == glowView ? glowBack : glowView;
+        glowView = in;
+        glowBack = out;
+        root.removeView(in);
+        root.addView(in, root.indexOfChild(out) + 1, full()); // incoming above outgoing
+        in.setImageBitmap(g);
+        in.setAlpha(0f);
+        android.view.animation.Interpolator ease = new android.view.animation.DecelerateInterpolator(1.5f);
+        in.animate().alpha(1f).setDuration(420).setInterpolator(ease).withLayer().start();
+        out.animate().alpha(0f).setDuration(420).setInterpolator(ease).withLayer()
+                .withEndAction(() -> out.setImageDrawable(null)).start();
+    }
+
+    /** Fades the wash out (focus moved to the top bar); the cached washes stay for coming back. */
+    private void fadeGlowOut() {
+        glowPkg = null;
+        glowShown = null;
+        handler.removeCallbacks(glowSettle);
+        for (ImageView v : new ImageView[]{glowView, glowBack}) {
+            v.animate().cancel();
+            v.animate().alpha(0f).setDuration(300).withLayer().withEndAction(() -> v.setImageDrawable(null)).start();
+        }
     }
 
     private void hideGlow() {
         glowPkg = null;
-        glowView.animate().cancel();
-        glowView.setAlpha(0f);
-        glowView.setImageDrawable(null);
+        glowShown = null;
+        handler.removeCallbacks(glowSettle);
+        for (ImageView v : new ImageView[]{glowView, glowBack}) {
+            v.animate().cancel();
+            v.setAlpha(0f);
+            v.setImageDrawable(null);
+        }
+    }
+
+    /** The apps-list title: the old name fades out and down, the new one fades in and rises. */
+    private void showTitle(CharSequence name) {
+        if (name.toString().contentEquals(sheetTitle.getText()) && sheetTitle.getAlpha() > 0.99f) return;
+        sheetTitle.animate().cancel();
+        sheetTitle.animate().alpha(0f).translationY(dp(6)).setDuration(110).withEndAction(() -> {
+            sheetTitle.setText(name);
+            sheetTitle.setTranslationY(dp(10));
+            sheetTitle.animate().alpha(1f).translationY(0).setDuration(200)
+                    .setInterpolator(new DecelerateInterpolator()).start();
+        }).start();
     }
 
     private void setTitleBottom(int bottom) {
@@ -1195,7 +1293,7 @@ public class MainActivity extends Activity {
     private TextView moveHint, sheetHint, sheetTitle;
     /** Home without the photo: all apps in one grid (Features > Home). */
     private boolean listMode;
-    private ImageView glowView;
+    private ImageView glowView, glowBack;
     private String glowPkg;
     private boolean movingInSheet;
 

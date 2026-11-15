@@ -4,7 +4,9 @@ import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.LinearGradient;
+import android.graphics.Matrix;
 import android.graphics.Paint;
+import android.graphics.RadialGradient;
 import android.graphics.Shader;
 
 /**
@@ -18,8 +20,8 @@ final class Glow {
     private Glow() { }
 
     /**
-     * Wash: the lower part of the screen takes the focused app's colours (up to three, spread left
-     * to right), fading up to nothing a third of the way down. @param sw, sh the screen size (cx, cy
+     * Wash: the lower part of the screen takes the focused app's colours (up to three soft glows
+     * along the bottom, blended), fading up to nothing a third of the way down. @param sw, sh the screen size (cx, cy
      * are not used by the wash).
      */
     static Bitmap render(Bitmap banner, float cx, float cy, int sw, int sh) {
@@ -28,14 +30,25 @@ final class Glow {
         int[] cols = palette(banner);
         Bitmap out = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
         Canvas c = new Canvas(out);
-        Paint p = new Paint();
-        if (cols.length == 1) {
-            p.setColor(cols[0]);
-        } else {
-            p.setShader(new LinearGradient(0, 0, w, 0, cols, null, Shader.TileMode.CLAMP));
+        // Each colour is a wide soft glow rising from the bottom, spread evenly across the width
+        // and overlapping its neighbours, so the colours melt into each other with no seams.
+        int n = cols.length;
+        for (int i = 0; i < n; i++) {
+            float x = n == 1 ? w / 2f : w * (0.5f + i) / n;
+            float rx = n == 1 ? w * 0.95f : w * 0.75f / n * 1.9f;
+            float[] stops = {0f, 0.35f, 0.7f, 1f};
+            int col = cols[i] & 0xFFFFFF;
+            int[] ring = {0xFF000000 | col, 0xF0000000 | col, 0xA0000000 | col, col};
+            RadialGradient g = new RadialGradient(x, h * 1.05f, rx, ring, stops, Shader.TileMode.CLAMP);
+            Matrix m = new Matrix();
+            m.setScale(1f, (h * 0.75f) / rx, x, h * 1.05f); // flatter than wide: a glow along the floor
+            g.setLocalMatrix(m);
+            Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
+            p.setShader(g);
+            c.drawRect(0, 0, w, h, p);
         }
-        c.drawRect(0, h / 3f, w, h, p);
-        // The fade: keep the colours' alpha only as strong as the vertical ramp allows.
+        blur(out, 3); // soften where the glows meet
+        // The fade: as strong as the vertical ramp allows, nothing above a third of the way down.
         Paint fade = new Paint();
         fade.setXfermode(new android.graphics.PorterDuffXfermode(android.graphics.PorterDuff.Mode.DST_IN));
         fade.setShader(new LinearGradient(0, h / 3f, 0, h,
@@ -43,6 +56,39 @@ final class Glow {
                 new float[]{0f, 0.35f, 0.7f, 1f}, Shader.TileMode.CLAMP));
         c.drawRect(0, 0, w, h, fade);
         return out;
+    }
+
+    /** Three box-blur passes each way (about a Gaussian); fine on a 240x135 bitmap. */
+    private static void blur(Bitmap b, int r) {
+        int w = b.getWidth(), h = b.getHeight();
+        int[] px = new int[w * h];
+        b.getPixels(px, 0, w, 0, 0, w, h);
+        for (int pass = 0; pass < 3; pass++) {
+            boxPass(px, w, h, r, true);
+            boxPass(px, w, h, r, false);
+        }
+        b.setPixels(px, 0, w, 0, 0, w, h);
+    }
+
+    private static void boxPass(int[] px, int w, int h, int r, boolean horizontal) {
+        int lines = horizontal ? h : w, len = horizontal ? w : h, n = 2 * r + 1;
+        int[] line = new int[len];
+        for (int l = 0; l < lines; l++) {
+            for (int i = 0; i < len; i++) line[i] = px[horizontal ? l * w + i : i * w + l];
+            int as = 0, rs = 0, gs = 0, bs = 0;
+            for (int i = -r; i <= r; i++) {
+                int p = line[Math.min(len - 1, Math.max(0, i))];
+                as += p >>> 24; rs += (p >> 16) & 0xff; gs += (p >> 8) & 0xff; bs += p & 0xff;
+            }
+            for (int i = 0; i < len; i++) {
+                px[horizontal ? l * w + i : i * w + l] = (as / n) << 24 | (rs / n) << 16 | (gs / n) << 8 | (bs / n);
+                int add = line[Math.min(len - 1, i + r + 1)], drop = line[Math.max(0, i - r)];
+                as += (add >>> 24) - (drop >>> 24);
+                rs += ((add >> 16) & 0xff) - ((drop >> 16) & 0xff);
+                gs += ((add >> 8) & 0xff) - ((drop >> 8) & 0xff);
+                bs += (add & 0xff) - (drop & 0xff);
+            }
+        }
     }
 
     /**
