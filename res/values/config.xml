@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Ambient's settings. Edit, then run build.sh with the install option. -->
+<resources>
+    <!-- The dock, left to right. Apps that aren't installed are skipped. -->
+    <string-array name="dock_apps">
+        <item>app.tvo.player</item>
+        <item>app.tvo.nativetv</item>
+        <item>org.smarttube.stable</item>
+        <item>com.stremio.one</item>
+        <item>ibpro.smart.player</item>
+        <item>org.videolan.vlc</item>
+        <item>com.intigral.jawwytv</item>
+    </string-array>
+
+    <!-- All apps (Down from the dock): these first, then the rest A to Z. -->
+    <string-array name="apps_first">
+        <item>com.android.vending</item>
+        <item>com.google.android.youtube.tv</item>
+        <item>com.tcl.magiconnectfree</item>
+    </string-array>
+
+    <!-- Never shown: system helpers that aren't apps to open. -->
+    <string-array name="hidden_apps">
+        <item>com.tcl.suspension</item>
+        <item>com.tcl.tv</item>
+        <item>com.tcl.settings</item>
+        <item>com.tcl.usercenter</item>
+        <item>com.android.messaging</item>
+        <item>org.chromium.webview_shell</item>
+        <item>com.techgenius.tvoslauncher</item>
+    </string-array>
+
+    <!-- The Features menu: apps switched on and off through the TV's adb. Also list each in the
+         manifest's <queries>. -->
+    <string-array name="feature_packages">
+        <item>com.google.android.apps.mediashell</item>
+        <item>com.tcl.miracast</item>
+        <item>com.tcl.guard</item>
+    </string-array>
+    <string-array name="feature_labels">
+        <item>Chromecast</item>
+        <item>Screen mirroring</item>
+        <item>TV Guard</item>
+    </string-array>
+
+    <!-- A new photo every this many minutes. -->
+    <integer name="photo_minutes">10</integer>
+
+    <!-- Background apps kept by Android (Developer options' limit, set again as Google's flag sync
+         wipes it). -1 leaves the system's default. -->
+    <integer name="process_limit">1</integer>
+</resources>

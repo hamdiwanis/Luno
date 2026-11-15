@@ -1,0 +1,10 @@
+# Build output and the local signing key
+build/
+debug.keystore
+*.keystore
+
+# Mockup inputs and renders: the TV's own fonts (Google's) and screenshots of other apps' banners
+mockups/src/
+mockups/out/
+
+.DS_Store
