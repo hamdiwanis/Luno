@@ -13,6 +13,9 @@ about 16 MB of its own memory on Home and 12 MB while another app is in front.
   others dimmed.
 - **Apps sheet** (Down from the dock): chosen apps first, then the rest A to Z; system helpers
   hidden. Built only when opened.
+- **Arrange from the remote**: hold OK on a dock app to move it or remove it from the dock; hold OK
+  in the apps sheet to move an app within the list or add it to the dock (up to 6). Saved on the TV;
+  `config.xml` only sets the starting order.
 - **Features menu** (top bar, or the remote's Menu key): switch apps such as Chromecast, screen
   mirroring or TV Guard on and off.
 - **Network name** shown without turning Location on.
@@ -37,7 +40,7 @@ Home button opens Luno.
 
 ## Settings
 
-Everything is in [`res/values/config.xml`](res/values/config.xml): dock apps, apps-sheet order,
+Everything is in [`res/values/config.xml`](res/values/config.xml): the starting dock and apps-sheet order,
 hidden apps, Features apps, photo interval and background limit. Edit, then build and install.
 
 ## Mockups

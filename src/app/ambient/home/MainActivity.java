@@ -24,6 +24,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
 import android.provider.Settings;
+import android.text.TextUtils;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.KeyEvent;
@@ -37,6 +38,7 @@ import android.widget.LinearLayout;
 import android.widget.PopupWindow;
 import android.widget.ScrollView;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import java.io.InputStream;
 import java.text.SimpleDateFormat;
@@ -117,7 +119,13 @@ public class MainActivity extends Activity {
     protected void onCreate(Bundle b) {
         super.onCreate(b);
         dockApps = getResources().getStringArray(R.array.dock_apps);
+        // The dock as arranged on the TV (hold OK on an app); config.xml only sets the first one.
+        String saved = getPreferences(MODE_PRIVATE).getString("dock", null);
+        if (saved != null) dockApps = saved.isEmpty() ? new String[0] : saved.split(",");
         appsFirst = getResources().getStringArray(R.array.apps_first);
+        // The apps list as sorted on the TV (hold OK > Move); config.xml only sets the first order.
+        String savedApps = getPreferences(MODE_PRIVATE).getString("apps", null);
+        if (savedApps != null) appsFirst = savedApps.isEmpty() ? new String[0] : savedApps.split(",");
         hidden.addAll(Arrays.asList(getResources().getStringArray(R.array.hidden_apps)));
         hidden.add(getPackageName());
         photoMs = Math.max(1, getResources().getInteger(R.integer.photo_minutes)) * 60_000L;
@@ -201,6 +209,7 @@ public class MainActivity extends Activity {
     @Override
     public void onBackPressed() {
         if (popup != null) dismissPopup();
+        else if (movingPkg != null) endMove();
         else if (sheet.getVisibility() == View.VISIBLE) closeSheet(true);
         // Home has nowhere to go back to.
     }
@@ -518,6 +527,7 @@ public class MainActivity extends Activity {
         box.setClipChildren(false);
 
         FrameLayout card = new FrameLayout(this);
+        card.setTag(app); // read when arranging the dock
         card.setId(View.generateViewId());
         card.setFocusable(true);
         card.setClickable(true);
@@ -572,8 +582,22 @@ public class MainActivity extends Activity {
                 scrollSheetTo(box);
             }
         });
+        // Hold OK: dock apps can be moved or removed, other apps added to the dock.
+        card.setOnLongClickListener(v -> {
+            if (movingPkg != null) return true;
+            if (inDock) {
+                showActions(v, new String[]{"Move", "Remove from dock"},
+                        new Runnable[]{() -> startMove(app.pkg), () -> removeFromDock(app.pkg)});
+            } else {
+                showActions(v, new String[]{"Move", "Add to dock"},
+                        new Runnable[]{() -> startMove(app.pkg), () -> addToDock(app.pkg)});
+            }
+            return true;
+        });
         if (inDock) {
             card.setOnKeyListener((v, code, ev) -> {
+                if (longPressKey(v, code, ev)) return true;
+                if (movingPkg != null) return moveKey(code, ev);
                 if (code == KeyEvent.KEYCODE_DPAD_DOWN && ev.getAction() == KeyEvent.ACTION_DOWN) {
                     openSheet();
                     return true;
@@ -582,6 +606,8 @@ public class MainActivity extends Activity {
             });
         } else {
             card.setOnKeyListener((v, code, ev) -> {
+                if (longPressKey(v, code, ev)) return true;
+                if (movingPkg != null) return moveKey(code, ev);
                 if (code == KeyEvent.KEYCODE_DPAD_UP && ev.getAction() == KeyEvent.ACTION_DOWN
                         && sheetTiles.indexOf(v) < 6) {
                     closeSheet(true);
@@ -620,6 +646,7 @@ public class MainActivity extends Activity {
         }
         if (!onDock) dockLabel.animate().alpha(0f).setDuration(120).start();
     }
+
 
     private void focusDock(int i) {
         if (dockTiles.isEmpty()) return;
@@ -949,6 +976,221 @@ public class MainActivity extends Activity {
         pw.setOnDismissListener(() -> { popup = null; anchor.requestFocus(); });
         popup = pw;
         pw.showAsDropDown(anchor, anchor.getWidth() - width, dp(12));
+        rows.get(0).requestFocus();
+    }
+
+    // ---------------------------------------------------------------- arranging the dock
+
+    /** Most apps the dock shows (more don't fit across a 1080p screen at this card size). */
+    static final int DOCK_MAX = 6;
+    private String movingPkg;
+    private TextView moveHint, sheetHint;
+    private boolean movingInSheet;
+
+    private boolean longFired;
+
+    /**
+     * Holding OK on a remote sends repeated key-downs; the first repeat opens the card's actions and
+     * the matching key-up is swallowed, so the app isn't also opened.
+     */
+    private boolean longPressKey(View v, int code, KeyEvent ev) {
+        if (code != KeyEvent.KEYCODE_DPAD_CENTER && code != KeyEvent.KEYCODE_ENTER) return false;
+        if (ev.getAction() == KeyEvent.ACTION_DOWN && ev.getRepeatCount() == 1 && movingPkg == null) {
+            longFired = true;
+            v.performLongClick();
+            return true;
+        }
+        if (ev.getAction() == KeyEvent.ACTION_DOWN && ev.getRepeatCount() > 1) return longFired;
+        if (ev.getAction() == KeyEvent.ACTION_UP && longFired) {
+            longFired = false;
+            return true;
+        }
+        return false;
+    }
+
+    private void saveDock() {
+        getPreferences(MODE_PRIVATE).edit().putString("dock", TextUtils.join(",", dockApps)).apply();
+    }
+
+    /** Index of pkg among the dock apps actually shown (installed ones). */
+    private int shownIndex(String pkg) {
+        for (int i = 0; i < dockTiles.size(); i++) {
+            Object t = dockTiles.get(i).getTag();
+            if (t instanceof App && ((App) t).pkg.equals(pkg)) return i;
+        }
+        return -1;
+    }
+
+    private void startMove(String pkg) {
+        movingPkg = pkg;
+        if (moveHint == null) {
+            moveHint = text(15, sansMedium(), Color.WHITE);
+            moveHint.setShadowLayer(dp(8), 0, dp(1), 0x99000000);
+            moveHint.setText("\u25C0  \u25B6  to move   \u00b7   OK when done");
+            root.addView(moveHint, lp(-2, -2, Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL, 0, 0, 0,
+                    dp(DOCK_BOTTOM + DOCK_TILE_H + 2 * (DOCK_GAP + DOCK_TILE_H * (DOCK_FOCUS - 1f) / 2f) + 14)));
+        }
+        movingInSheet = sheet.getVisibility() == View.VISIBLE;
+        if (movingInSheet) {
+            moveHint.setVisibility(View.GONE); // the dock's hint, not this one
+            if (sheetHint == null) {
+                sheetHint = text(15, sansMedium(), 0xD9FFFFFF);
+                sheetHint.setText("\u25C0 \u25B6 \u25B2 \u25BC  to move   \u00b7   OK when done");
+                sheet.addView(sheetHint, lp(-2, -2, Gravity.TOP | Gravity.END, 0, dp(48), dp(64), 0));
+            }
+            sheetHint.setVisibility(View.VISIBLE);
+            int i = sheetIndex(pkg);
+            if (i >= 0) sheetTiles.get(i).requestFocus();
+            return;
+        }
+        moveHint.setVisibility(View.VISIBLE);
+        int i = shownIndex(pkg);
+        if (i >= 0) dockTiles.get(i).requestFocus();
+    }
+
+    private int sheetIndex(String pkg) {
+        for (int i = 0; i < sheetApps.size(); i++) if (sheetApps.get(i).pkg.equals(pkg)) return i;
+        return -1;
+    }
+
+    /** Moves the app within the apps list (arrows, one place or one row) and saves the order. */
+    private boolean moveInSheet(int code) {
+        int from = sheetIndex(movingPkg), cols = 6, to;
+        if (code == KeyEvent.KEYCODE_DPAD_LEFT) to = from - 1;
+        else if (code == KeyEvent.KEYCODE_DPAD_RIGHT) to = from + 1;
+        else if (code == KeyEvent.KEYCODE_DPAD_UP) to = from - cols;
+        else to = from + cols;
+        if (from < 0 || to < 0 || to >= sheetApps.size()) return true;
+        List<String> order = new ArrayList<>();
+        for (App a : sheetApps) order.add(a.pkg);
+        order.add(to, order.remove(from));
+        appsFirst = order.toArray(new String[0]);
+        getPreferences(MODE_PRIVATE).edit().putString("apps", TextUtils.join(",", appsFirst)).apply();
+        buildApps(); // rebuilds the open sheet in the new order
+        sheetTiles.get(to).requestFocus();
+        return true;
+    }
+
+    private boolean moveKey(int code, KeyEvent ev) {
+        if (ev.getAction() != KeyEvent.ACTION_DOWN) return true;
+        if (movingInSheet) {
+            if (code == KeyEvent.KEYCODE_DPAD_LEFT || code == KeyEvent.KEYCODE_DPAD_RIGHT
+                    || code == KeyEvent.KEYCODE_DPAD_UP || code == KeyEvent.KEYCODE_DPAD_DOWN) {
+                return moveInSheet(code);
+            }
+            if (code == KeyEvent.KEYCODE_DPAD_CENTER || code == KeyEvent.KEYCODE_ENTER) endMove();
+            return true;
+        }
+        if (code == KeyEvent.KEYCODE_DPAD_LEFT || code == KeyEvent.KEYCODE_DPAD_RIGHT) {
+            int from = shownIndex(movingPkg);
+            int to = from + (code == KeyEvent.KEYCODE_DPAD_LEFT ? -1 : 1);
+            if (from < 0 || to < 0 || to >= dockTiles.size()) return true;
+            String other = ((App) dockTiles.get(to).getTag()).pkg;
+            List<String> list = new ArrayList<>(Arrays.asList(dockApps));
+            int a = list.indexOf(movingPkg), b = list.indexOf(other);
+            list.set(a, other);
+            list.set(b, movingPkg);
+            dockApps = list.toArray(new String[0]);
+            saveDock();
+            buildApps();
+            dockTiles.get(to).requestFocus();
+            return true;
+        }
+        if (code == KeyEvent.KEYCODE_DPAD_CENTER || code == KeyEvent.KEYCODE_ENTER
+                || code == KeyEvent.KEYCODE_DPAD_UP || code == KeyEvent.KEYCODE_DPAD_DOWN) {
+            endMove();
+        }
+        return true;
+    }
+
+    private void endMove() {
+        movingPkg = null;
+        movingInSheet = false;
+        if (moveHint != null) moveHint.setVisibility(View.GONE);
+        if (sheetHint != null) sheetHint.setVisibility(View.GONE);
+    }
+
+    private void removeFromDock(String pkg) {
+        int i = shownIndex(pkg);
+        List<String> list = new ArrayList<>(Arrays.asList(dockApps));
+        list.remove(pkg);
+        dockApps = list.toArray(new String[0]);
+        saveDock();
+        buildApps();
+        focusDock(Math.max(0, i - 1));
+    }
+
+    private void addToDock(String pkg) {
+        if (dockTiles.size() >= DOCK_MAX) {
+            Toast.makeText(this, "The dock is full: remove an app from it first", Toast.LENGTH_LONG).show();
+            return;
+        }
+        List<String> list = new ArrayList<>(Arrays.asList(dockApps));
+        list.remove(pkg);
+        list.add(pkg);
+        dockApps = list.toArray(new String[0]);
+        saveDock();
+        closeSheet(false);
+        buildApps();
+        focusDock(dockTiles.size() - 1);
+    }
+
+    /** A small menu of actions just above (or below) the given card. */
+    private void showActions(View anchor, String[] labels, Runnable[] actions) {
+        LinearLayout list = new LinearLayout(this);
+        list.setOrientation(LinearLayout.VERTICAL);
+        list.setPadding(dp(8), dp(8), dp(8), dp(8));
+        GradientDrawable panel = new GradientDrawable();
+        panel.setCornerRadius(dp(18));
+        panel.setColor(0xF21C1D21);
+        panel.setStroke(dp(1), 0x26FFFFFF);
+        list.setBackground(panel);
+        int width = dp(220);
+        PopupWindow pw = new PopupWindow(list, width, ViewGroup.LayoutParams.WRAP_CONTENT, true);
+        List<TextView> rows = new ArrayList<>();
+        for (int i = 0; i < labels.length; i++) {
+            Runnable act = actions[i];
+            TextView r = text(14, sans(), Color.WHITE);
+            r.setGravity(Gravity.CENTER_VERTICAL);
+            r.setPadding(dp(16), 0, dp(16), 0);
+            r.setFocusable(true);
+            r.setClickable(true);
+            r.setId(View.generateViewId());
+            r.setText(labels[i]);
+            GradientDrawable bg = new GradientDrawable();
+            bg.setCornerRadius(dp(12));
+            bg.setColor(Color.TRANSPARENT);
+            r.setBackground(bg);
+            r.setOnFocusChangeListener((v, has) -> {
+                bg.setColor(has ? 0xF7FFFFFF : Color.TRANSPARENT);
+                r.setTextColor(has ? 0xFF111114 : Color.WHITE);
+            });
+            r.setOnClickListener(v -> {
+                pw.setOnDismissListener(() -> popup = null); // the action places focus itself
+                pw.dismiss();
+                act.run();
+            });
+            list.addView(r, new LinearLayout.LayoutParams(-1, dp(42)));
+            rows.add(r);
+        }
+        for (int i = 0; i < rows.size(); i++) {
+            TextView r = rows.get(i);
+            r.setNextFocusUpId(rows.get(Math.max(0, i - 1)).getId());
+            r.setNextFocusDownId(rows.get(Math.min(rows.size() - 1, i + 1)).getId());
+            r.setNextFocusLeftId(r.getId());
+            r.setNextFocusRightId(r.getId());
+        }
+        list.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY), View.MeasureSpec.UNSPECIFIED);
+        int[] at = new int[2];
+        anchor.getLocationOnScreen(at);
+        int x = at[0] + Math.round(anchor.getWidth() * anchor.getScaleX()) / 2 - width / 2;
+        int y = at[1] - list.getMeasuredHeight() - dp(14);
+        if (y < dp(16)) y = at[1] + Math.round(anchor.getHeight() * anchor.getScaleY()) + dp(14);
+        pw.setOutsideTouchable(true);
+        pw.setElevation(dp(16));
+        pw.setOnDismissListener(() -> { popup = null; anchor.requestFocus(); });
+        popup = pw;
+        pw.showAtLocation(root, Gravity.TOP | Gravity.START, Math.max(dp(16), x), y);
         rows.get(0).requestFocus();
     }
 

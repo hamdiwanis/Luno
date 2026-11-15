@@ -420,3 +420,265 @@ def render_refinements():
                      ("a3-compact-bar", compact_bar)):
         fn().convert("RGB").save(os.path.join(OUT, name + ".png"))
         print("saved", name)
+
+
+# ------------------------------------------------------------------ effects from the focused app
+import colorsys
+
+
+def accent(img):
+    """The banner's most vivid colour (what the effect is tinted with)."""
+    small = img.convert("RGB").resize((24, 14), Image.LANCZOS)
+    best, score = (120, 120, 160), -1
+    for px in small.getdata():
+        h, s, v = colorsys.rgb_to_hsv(*(c / 255 for c in px))
+        sc = s * s * v
+        if sc > score:
+            best, score = px, sc
+    h, s, v = colorsys.rgb_to_hsv(*(c / 255 for c in best))
+    r, g, b = colorsys.hsv_to_rgb(h, min(1, s * 1.1), max(v, 0.85))
+    return int(r * 255), int(g * 255), int(b * 255)
+
+
+def focus_box(i):
+    x = CARD_X0 + i * CARD_STEP
+    return x, CARD_Y, x + CW, CARD_Y + CH
+
+
+def radial(size, center, radius, color, alpha, squash=1.0):
+    """A soft radial light, drawn small and blurred (as the app would: cheap)."""
+    w, h = size
+    s = 8
+    g = Image.new("RGBA", (w // s, h // s), color + (0,))
+    d = ImageDraw.Draw(g)
+    cx, cy, r = center[0] / s, center[1] / s, radius / s
+    for k in range(40, 0, -1):
+        rr = r * k / 40
+        a = int(alpha * (1 - k / 40) ** 1.6)
+        d.ellipse((cx - rr, cy - rr * squash, cx + rr, cy + rr * squash), fill=color + (a,))
+    return g.resize((w, h), Image.BILINEAR).filter(ImageFilter.GaussianBlur(20))
+
+
+def screen_with(effect, focus=3):
+    im = app_photo()
+    b = banners()
+    col = accent(b[focus])
+    effect(im, b[focus], col, focus)
+    # Compact bar, as on the TV now.
+    mid = MARGIN + BTN / 2
+    ft, fd = font(GSM, 56), font(GS, 30)
+    text(im, (LEFT, mid + cap_top(ft) / 2), "19:37", ft, anchor="ls")
+    tw = ImageDraw.Draw(im).textlength("19:37", font=ft)
+    x = LEFT + tw + 24
+    ImageDraw.Draw(im).line((x, mid - 18, x, mid + 18), fill=(255, 255, 255, 120), width=2)
+    text(im, (x + 24, mid + cap_top(fd, "S") / 2), "Sunday 15 November", fd, fill=(255, 255, 255, 215), anchor="ls")
+    app_status(im, RIGHT, MARGIN)
+    app_dock(im, focus=focus)
+    return im
+
+
+def fx_glow(im, img, col, i):
+    """A coloured light rising from behind the focused app."""
+    x0, y0, x1, y1 = focus_box(i)
+    im.alpha_composite(radial(im.size, ((x0 + x1) // 2, y0 + 60), 760, col, 215, squash=0.7))
+
+
+def fx_wash(im, img, col, i):
+    """The whole lower half of the photo takes on the app's colour."""
+    g = Image.new("RGBA", im.size, col + (0,))
+    d = ImageDraw.Draw(g)
+    for y in range(H // 3, H):
+        a = int(120 * ((y - H / 3) / (H * 2 / 3)) ** 1.4)
+        d.line((0, y, W, y), fill=col + (a,))
+    im.alpha_composite(g)
+
+
+def fx_bloom(im, img, col, i):
+    """The focused banner itself, enlarged and blurred into the background like light from a screen."""
+    x0, y0, x1, y1 = focus_box(i)
+    cx = (x0 + x1) // 2
+    big = img.convert("RGBA").resize((1200, 675), Image.BILINEAR).filter(ImageFilter.GaussianBlur(70))
+    layer = Image.new("RGBA", im.size, (0, 0, 0, 0))
+    layer.alpha_composite(big, (max(-300, min(W - 900, cx - 600)), 360))
+    mask = radial(im.size, (cx, 760), 700, (255, 255, 255), 255, squash=0.6).getchannel("A")
+    layer.putalpha(Image.composite(layer.getchannel("A"), Image.new("L", im.size, 0), mask))
+    # Brighten the bloom like light, then lay it over the photo.
+    layer = Image.merge("RGBA", [*(ch.point(lambda v: min(255, int(v * 1.8 + 20))) for ch in layer.split()[:3]),
+                                 layer.getchannel("A")])
+    im.alpha_composite(layer)
+    im.alpha_composite(radial(im.size, (cx, 820), 600, col, 90, squash=0.6))
+
+
+def fx_spotlight(im, img, col, i):
+    """The photo dims except a soft pool of warm light above the focused app."""
+    x0, y0, x1, y1 = focus_box(i)
+    dim = Image.new("RGBA", im.size, (0, 0, 0, 120))
+    hole = radial(im.size, ((x0 + x1) // 2, y0 - 60), 560, (255, 255, 255), 255, squash=0.85).getchannel("A")
+    dim.putalpha(Image.eval(hole, lambda a: int(120 * (1 - a / 255))))
+    im.alpha_composite(dim)
+    im.alpha_composite(radial(im.size, ((x0 + x1) // 2, y0 - 40), 420, col, 70, squash=0.8))
+
+
+def render_effects_more():
+    screen_with(fx_glow, focus=2).convert("RGB").save(os.path.join(OUT, "e1b-glow-smarttube.png"))
+    print("saved e1b")
+
+
+def render_effects():
+    for name, fx in (("e0-none", lambda *a: None), ("e1-glow", fx_glow), ("e2-wash", fx_wash),
+                     ("e3-bloom", fx_bloom), ("e4-spotlight", fx_spotlight)):
+        screen_with(fx).convert("RGB").save(os.path.join(OUT, name + ".png"))
+        print("saved", name)
+
+
+# ------------------------------------------------------------------ round 2: effects close to the focused app
+
+def focused_rect(i):
+    x0, y0, x1, y1 = focus_box(i)
+    g, gy = int(CW * 0.05), int(CH * 0.05)
+    return x0 - g, y0 - gy, x1 + g, y1 + gy
+
+
+def screen_post(before=None, after=None, focus=3, rim=None):
+    im = app_photo()
+    b = banners()
+    col = accent(b[focus])
+    if before:
+        before(im, b[focus], col, focus)
+    mid = MARGIN + BTN / 2
+    ft, fd = font(GSM, 56), font(GS, 30)
+    text(im, (LEFT, mid + cap_top(ft) / 2), "19:37", ft, anchor="ls")
+    tw = ImageDraw.Draw(im).textlength("19:37", font=ft)
+    x = LEFT + tw + 24
+    ImageDraw.Draw(im).line((x, mid - 18, x, mid + 18), fill=(255, 255, 255, 120), width=2)
+    text(im, (x + 24, mid + cap_top(fd, "S") / 2), "Sunday 15 November", fd, fill=(255, 255, 255, 215), anchor="ls")
+    app_status(im, RIGHT, MARGIN)
+    app_dock(im, focus=focus)
+    if rim:
+        rim(im, col)
+    if after:
+        after(im, b[focus], col, focus)
+    return im
+
+
+def fx_lift_shadow(im, img, col, i):
+    """The focused card casts a deep soft shadow onto the dock, as if it rose off it."""
+    x0, y0, x1, y1 = focused_rect(i)
+    shadow(im, (x0 + 10, y0 + 24, x1 - 10, y1 + 18), 26, blur=26, alpha=200, dy=10)
+
+
+def fx_light_bar(im, img, col, i):
+    """A thin bar of the app's colour glows under the focused card, on the dock's floor."""
+    x0, y0, x1, y1 = focused_rect(i)
+    cx = (x0 + x1) // 2
+    im.alpha_composite(radial(im.size, (cx, y1 + 8), 260, col, 230, squash=0.08))
+    d = ImageDraw.Draw(im)
+    d.rounded_rectangle((cx - 60, y1 + 6, cx + 60, y1 + 11), 3, fill=col + (255,))
+
+
+def fx_reflection(im, img, col, i):
+    """A faint mirror image of the focused banner on the dock's glass, below it."""
+    x0, y0, x1, y1 = focused_rect(i)
+    ref = img.convert("RGBA").resize((x1 - x0, y1 - y0)).transpose(Image.FLIP_TOP_BOTTOM)
+    fade = Image.new("L", ref.size, 0)
+    d = ImageDraw.Draw(fade)
+    for y in range(ref.size[1]):
+        d.line((0, y, ref.size[0], y), fill=int(70 * (1 - y / (ref.size[1] * 0.5)) if y < ref.size[1] * 0.5 else 0))
+    ref.putalpha(Image.composite(fade, Image.new("L", ref.size, 0), rounded_mask(ref.size, 22)))
+    layer = Image.new("RGBA", im.size, (0, 0, 0, 0))
+    layer.alpha_composite(ref, (x0, y1 + 8))
+    im.alpha_composite(layer)
+
+
+def rim_tint(im, col):
+    """The dock's thin border takes the focused app's colour."""
+    x0, y0, x1, y1 = DOCK
+    outline(im, (x0, y0, x1 - 1, y1 - 1), 40, col + (170,), 3)
+    glow = Image.new("RGBA", im.size, (0, 0, 0, 0))
+    ImageDraw.Draw(glow).rounded_rectangle((x0, y0, x1 - 1, y1 - 1), 40, outline=col + (120,), width=10)
+    im.alpha_composite(glow.filter(ImageFilter.GaussianBlur(12)))
+
+
+def render_effects2():
+    for name, kw in (("f1-lift-shadow", dict(after=None, before=None)),
+                     ("f2-light-bar", dict(after=fx_light_bar)),
+                     ("f3-reflection", dict(after=fx_reflection)),
+                     ("f4-dock-rim", dict(rim=rim_tint))):
+        im = screen_post(**kw)
+        if name == "f1-lift-shadow":  # the shadow sits under the card: redraw the card on top
+            im = app_photo()
+            screen = screen_post()
+            im = screen
+            fx_lift_shadow(im, None, None, 3)
+            x0, y0, x1, y1 = focused_rect(3)
+            card(im, banners()[3], (x0, y0 - 6, x1, y1 - 6), 24, focused=True)
+        im.convert("RGB").save(os.path.join(OUT, name + ".png"))
+        print("saved", name)
+
+
+# ------------------------------------------------------------------ round 3
+
+def fx_halo(im, img, col, i):
+    """A soft white light around the focused card's edge, no colour."""
+    x0, y0, x1, y1 = focused_rect(i)
+    g = Image.new("RGBA", im.size, (0, 0, 0, 0))
+    ImageDraw.Draw(g).rounded_rectangle((x0 - 4, y0 - 4, x1 + 4, y1 + 4), 28, outline=(255, 255, 255, 170), width=12)
+    im.alpha_composite(g.filter(ImageFilter.GaussianBlur(14)))
+    card(im, img, (x0, y0, x1, y1), 24, focused=True)
+
+
+def fx_shine(im, img, col, i):
+    """A diagonal band of light caught across the focused banner (it sweeps once on focus)."""
+    x0, y0, x1, y1 = focused_rect(i)
+    w, h = x1 - x0, y1 - y0
+    band = Image.new("RGBA", (w, h), (255, 255, 255, 0))
+    d = ImageDraw.Draw(band)
+    for k in range(-60, 61):
+        a = int(70 * (1 - abs(k) / 60) ** 2)
+        x = int(w * 0.55) + k
+        d.line((x - h // 2, h, x + h // 2, 0), fill=(255, 255, 255, a), width=2)
+    band.putalpha(Image.composite(band.getchannel("A"), Image.new("L", band.size, 0), rounded_mask(band.size, 24)))
+    im.alpha_composite(band, (x0, y0))
+
+
+def fx_dot(im, img, col, i):
+    """A small white dot under the focused app, like a running-app indicator."""
+    x0, y0, x1, y1 = focused_rect(i)
+    cx = (x0 + x1) // 2
+    ImageDraw.Draw(im).ellipse((cx - 6, y1 + 9, cx + 6, y1 + 21), fill=(255, 255, 255, 235))
+
+
+def depth_dock(focus=3):
+    """The focused card full size and bright; the others smaller and dimmer, receding."""
+    im = app_photo()
+    mid = MARGIN + BTN / 2
+    ft, fd = font(GSM, 56), font(GS, 30)
+    text(im, (LEFT, mid + cap_top(ft) / 2), "19:37", ft, anchor="ls")
+    tw = ImageDraw.Draw(im).textlength("19:37", font=ft)
+    x = LEFT + tw + 24
+    ImageDraw.Draw(im).line((x, mid - 18, x, mid + 18), fill=(255, 255, 255, 120), width=2)
+    text(im, (x + 24, mid + cap_top(fd, "S") / 2), "Sunday 15 November", fd, fill=(255, 255, 255, 215), anchor="ls")
+    app_status(im, RIGHT, MARGIN)
+    x0, y0, x1, y1 = DOCK
+    panel = Image.new("RGBA", (x1 - x0, y1 - y0), (16, 18, 20, 82))
+    im.paste(panel, (x0, y0), Image.composite(panel, Image.new("RGBA", panel.size), rounded_mask(panel.size, 40)).getchannel("A"))
+    outline(im, (x0, y0, x1 - 1, y1 - 1), 40, (255, 255, 255, 36), 2)
+    for k, img in enumerate(banners()):
+        bx, by, bx1, by1 = focus_box(k)
+        cx, cy = (bx + bx1) / 2, (by + by1) / 2
+        if k == focus:
+            s, dim = 1.08, 1.0
+        else:
+            s, dim = 0.86 - 0.03 * min(3, abs(k - focus) - 1), 0.62
+        w, h = CW * s, CH * s
+        card(im, img, (int(cx - w / 2), int(cy - h / 2), int(cx + w / 2), int(cy + h / 2)), 22,
+             focused=(k == focus), dim=dim)
+    return im
+
+
+def render_effects3():
+    for name, fx in (("g1-halo", fx_halo), ("g2-shine", fx_shine), ("g4-dot", fx_dot)):
+        screen_post(after=fx).convert("RGB").save(os.path.join(OUT, name + ".png"))
+        print("saved", name)
+    depth_dock().convert("RGB").save(os.path.join(OUT, "g3-depth.png"))
+    print("saved g3-depth")
