@@ -18,11 +18,16 @@ B=build
 rm -rf "$B" && mkdir -p "$B/gen" "$B/classes" "$B/dex"
 "$BT/aapt2" compile --dir res -o "$B/res.zip"
 "$BT/aapt2" link -o "$B/base.apk" -I "$JAR" --manifest AndroidManifest.xml --java "$B/gen" \
+  --proguard "$B/aapt-rules.txt" \
   -A assets --min-sdk-version 28 --target-sdk-version 30 \
   --version-code "${VERSION_CODE:-1}" --version-name "${VERSION_NAME:-1.0}" "$B/res.zip"
 javac -nowarn -Xlint:-options -encoding UTF-8 --release 11 -classpath "$JAR" -d "$B/classes" \
   $(find src "$B/gen" -name '*.java')
-"$BT/d8" --release --min-api 28 --lib "$JAR" --output "$B/dex" $(find "$B/classes" -name '*.class')
+# R8: shrink and optimise the code (keeps what the manifest names: aapt-rules.txt; plus proguard-rules.pro).
+(cd "$B/classes" && jar cf ../classes.jar .)
+java -cp "$BT/lib/d8.jar" com.android.tools.r8.R8 --release --min-api 28 --lib "$JAR" \
+  --pg-conf "$B/aapt-rules.txt" --pg-conf proguard-rules.pro --pg-map-output "$B/mapping.txt" \
+  --output "$B/dex" "$B/classes.jar"
 cp "$B/base.apk" "$B/unsigned.apk"
 (cd "$B/dex" && zip -q -u ../unsigned.apk classes.dex)
 "$BT/zipalign" -f 4 "$B/unsigned.apk" "$B/aligned.apk"

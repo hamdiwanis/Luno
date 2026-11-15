@@ -745,10 +745,10 @@ public class MainActivity extends Activity {
             // One title above the grid: the focused app's name, large.
             sheetTitle.setVisibility(View.VISIBLE);
             sheetTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 28);
-            setTitleBottom(dp(DOCK_BOTTOM + 12)); // bottom left, the same margin as the top bar's
+            setTitleBottom(dp(DOCK_BOTTOM + 1)); // bottom left: the text sits as far from the bottom edge as the time and date from the top
             sheet.setBackgroundColor(Color.TRANSPARENT);
             sl.topMargin = dp(DOCK_BOTTOM + BAR_H + 34); // under the top bar
-            sl.bottomMargin = dp(DOCK_BOTTOM + 12 + 38 + 16); // above the title
+            sl.bottomMargin = dp(DOCK_BOTTOM + 1 + 38 + 16); // above the title
             // No dock to align to: the top bar lines up with the grid's edges instead.
             setBarEdges(dp(64), dp(64));
             sheet.animate().cancel();

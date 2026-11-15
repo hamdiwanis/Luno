@@ -31,7 +31,8 @@ The Features menu, network name and background limit use the TV's own adb (netwo
 
 ## Build and install
 
-Needs JDK 17 and the Android SDK (build-tools 34.0.0, platform 34). No Gradle.
+Needs JDK 17 and the Android SDK (build-tools 34.0.0, platform 34). No Gradle; the code is shrunk
+and optimised with R8 (`proguard-rules.pro`; `build/mapping.txt` maps crash traces back).
 
 ```bash
 ./build.sh                                  # build build/luno.apk
