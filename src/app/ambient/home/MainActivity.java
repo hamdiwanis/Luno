@@ -56,7 +56,7 @@ import java.util.regex.Pattern;
 /**
  * Ambient: a photo-first home screen for Android TV. A full-bleed photo that changes every few
  * minutes, a large clock on the left, a compact floating dock, and every other app one press down.
- * Built to be light: no live blur, photos stored at 2 bytes a pixel, only scale and fade animate,
+ * Built to be light: no live blur, the photo released while an app is open, only scale and fade animate,
  * nothing runs while another app is in front.
  */
 public class MainActivity extends Activity {
@@ -676,7 +676,7 @@ public class MainActivity extends Activity {
         return v;
     }
 
-    /** Decodes the next photo off the main thread (2 bytes a pixel, about screen size), then fades it in. */
+    /** Decodes the next photo off the main thread (full colour, screen size), then fades it in. */
     private void nextPhoto() {
         handler.removeCallbacks(nextPhotoTask);
         if (photos.length == 0) return;
@@ -692,7 +692,10 @@ public class MainActivity extends Activity {
     private void loadPhoto(int i) {
         photoLoaded = true;
         String name = "wallpapers/" + photos[i];
-        int sw = getResources().getDisplayMetrics().widthPixels, sh = getResources().getDisplayMetrics().heightPixels;
+        // Prepared at 1/PHOTO_SCALE of the screen and scaled up by the GPU (the view is FIT_XY):
+        // at 2, a 1080p photo takes ~1 MB instead of ~4 MB.
+        int sw = getResources().getDisplayMetrics().widthPixels / PHOTO_SCALE;
+        int sh = getResources().getDisplayMetrics().heightPixels / PHOTO_SCALE;
         new Thread(() -> {
             Bitmap bm = null;
             try {
@@ -704,7 +707,7 @@ public class MainActivity extends Activity {
                     o.inSampleSize *= 2;
                 }
                 o.inJustDecodeBounds = false;
-                o.inPreferredConfig = Bitmap.Config.RGB_565;
+                o.inPreferredConfig = Bitmap.Config.ARGB_8888; // full colour: no banding in skies
                 Bitmap src;
                 try (InputStream in = getAssets().open(name)) { src = BitmapFactory.decodeStream(in, null, o); }
                 if (src != null) {
@@ -737,10 +740,11 @@ public class MainActivity extends Activity {
 
     /**
      * The photo centre-cropped to exactly the screen (drawn 1:1, nothing scaled per frame), with the
-     * shade for the clock (left) and the dock (bottom) painted in. 2 bytes a pixel: ~4 MB at 1080p.
+     * shade for the clock (left) and the dock (bottom) painted in. Full colour: ~8 MB at 1080p, held
+     * only while Home is showing (released in onStop).
      */
     private static Bitmap prepare(Bitmap src, int sw, int sh) {
-        Bitmap out = Bitmap.createBitmap(sw, sh, Bitmap.Config.RGB_565);
+        Bitmap out = Bitmap.createBitmap(sw, sh, Bitmap.Config.ARGB_8888);
         android.graphics.Canvas c = new android.graphics.Canvas(out);
         float s = Math.max((float) sw / src.getWidth(), (float) sh / src.getHeight());
         android.graphics.Matrix m = new android.graphics.Matrix();
@@ -756,7 +760,36 @@ public class MainActivity extends Activity {
                 new int[]{0x00000000, 0x00000000, 0x14000000, 0x66000000}, null,
                 android.graphics.Shader.TileMode.CLAMP));
         c.drawRect(0, 0, sw, sh, p);
+        // Overlay that hides the photos' compression softness: a light dark tint, then a fine grain
+        // that breaks up JPEG blocks. Baked in once, free to draw.
+        p.setShader(null);
+        p.setColor(PHOTO_TINT);
+        c.drawRect(0, 0, sw, sh, p);
+        p.setShader(new android.graphics.BitmapShader(grain(),
+                android.graphics.Shader.TileMode.REPEAT, android.graphics.Shader.TileMode.REPEAT));
+        c.drawRect(0, 0, sw, sh, p);
         return out;
+    }
+
+    /** Photos are kept at 1/PHOTO_SCALE of the screen size (1 = full resolution). */
+    static final int PHOTO_SCALE = 1;
+
+    /** Dark tint over every photo (alpha 0x26 = 15%). */
+    static final int PHOTO_TINT = 0x26000000;
+    /** Strength of the grain, 0..255 (16 = about 6%). */
+    static final int GRAIN_ALPHA = 16;
+
+    /** A 128x128 tile of soft monochrome noise, light and dark around zero. */
+    private static Bitmap grain() {
+        int n = 128;
+        int[] px = new int[n * n];
+        java.util.Random r = new java.util.Random(7);
+        for (int i = 0; i < px.length; i++) {
+            float v = (float) r.nextGaussian();
+            int a = Math.min(255, Math.round(Math.abs(v) * GRAIN_ALPHA));
+            px[i] = (a << 24) | (v > 0 ? 0xFFFFFF : 0x000000);
+        }
+        return Bitmap.createBitmap(px, n, n, Bitmap.Config.ARGB_8888);
     }
 
     private void showPhoto(Bitmap bm) {
