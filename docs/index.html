@@ -35,6 +35,10 @@ body{margin:0;background:var(--bg);color:var(--text);font:400 18px/1.6 Inter,sys
 a{color:inherit}
 .wrap{max-width:1280px;margin:0 auto;padding:0 28px}
 
+/* header and hero, over drifting TV things (a canvas) */
+.top{position:relative;overflow:hidden}
+#particles{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+.top .wrap{position:relative;z-index:1}
 /* header and hero */
 header{display:flex;justify-content:space-between;align-items:center;padding:24px 0}
 .logo{display:flex;align-items:center;gap:12px;font-weight:600;font-size:22px;text-decoration:none}
@@ -97,8 +101,8 @@ nav a:hover{color:var(--text)}
 
 .dock{position:absolute;bottom:calc(var(--dp)*32);left:50%;transform:translateX(-50%);display:flex;align-items:center;
       padding:calc(var(--dp)*12.6) calc(var(--dp)*15.4);border-radius:calc(var(--dp)*21);background:rgba(16,18,20,.32);border:1px solid rgba(255,255,255,.14);z-index:4;transition:opacity .3s,transform .3s}
-.tv.list .dock,.tv.sheet .dock{opacity:0;pointer-events:none}
-.tv.sheet .bar .clock,.tv.sheet .bar .top{opacity:.25}
+.tv.list .dock,.tv.sheet-open .dock{opacity:0;pointer-events:none}
+.tv.sheet-open .bar .clock,.tv.sheet-open .bar .top{opacity:.25}
 .card{position:relative;flex:none;width:calc(var(--dp)*128);aspect-ratio:16/9;border-radius:calc(var(--dp)*11);overflow:hidden;display:flex;align-items:center;justify-content:center;
       transition:transform .18s cubic-bezier(.2,.8,.2,1),opacity .16s,box-shadow .14s;cursor:pointer;box-shadow:inset 0 0 0 0 #fff}
 .dock .card+.card{margin-left:calc(var(--dp)*17)}
@@ -112,7 +116,7 @@ nav a:hover{color:var(--text)}
 .upd i b{display:block;height:100%;background:#fff;width:0;transition:width .3s}
 
 .sheet{position:absolute;inset:0;background:rgba(14,16,19,.98);z-index:6;opacity:0;pointer-events:none;transition:opacity .25s}
-.tv.sheet .sheet{opacity:1;pointer-events:auto}
+.tv.sheet-open .sheet{opacity:1;pointer-events:auto}
 .tv.list .sheet{opacity:1;pointer-events:auto;background:transparent;z-index:3}
 .sheet .title{position:absolute;left:calc(var(--dp)*64);top:calc(var(--dp)*40);font-size:calc(var(--dp)*22);font-weight:500;color:#fff;transition:opacity .15s}
 .tv.list .sheet .title{top:auto;bottom:calc(var(--dp)*44);font-size:calc(var(--dp)*36)}
@@ -195,6 +199,8 @@ footer a{color:var(--muted)}
 </style>
 </head>
 <body>
+<div class="top">
+<canvas id="particles" aria-hidden="true"></canvas>
 <div class="wrap">
   <header>
     <a class="logo" href="#"><img src="logo.svg" alt="">Luno</a>
@@ -211,6 +217,7 @@ footer a{color:var(--muted)}
   </div>
 </div>
 
+</div>
 <div class="stage" id="demo">
   <div class="pin">
     <div class="blackout"></div>
@@ -398,7 +405,7 @@ TV=192.168.1.20:5555 ./debloat.sh             <span class="c"># do it (--restore
       c.firstElementChild.classList.toggle('f', on);
     });
     tops.forEach((t, i) => t.classList.toggle('f', S.area === 'top' && i === S.ti));
-    tv.classList.toggle('sheet', S.mode === 'photo' && S.area === 'sheet');
+    tv.classList.toggle('sheet-open', S.mode === 'photo' && S.area === 'sheet');
     // the apps list: the focused app's name, large, and its colour washed over the lower screen
     if (S.mode === 'list') {
       const id = S.area === 'sheet' ? gridCells()[S.si]?.querySelector('.card').dataset.id : null;
@@ -687,6 +694,111 @@ TV=192.168.1.20:5555 ./debloat.sh             <span class="c"># do it (--restore
   }));
 
   build();
+})();
+</script>
+<script>
+// Drifting TV things behind the header and hero: line icons and channel / episode labels. They turn
+// slowly, wrap at the edges, step out of the mouse's way, fade behind the headline, and stop when
+// the hero is off screen or the system asks for less motion.
+(() => {
+  const canvas = document.getElementById('particles'), top = canvas.parentElement, ctx = canvas.getContext('2d');
+  const ICONS = [
+    'M3 7h18v12H3z M8 3l4 4 4-4',                                                    // TV with antennas
+    'M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18z M10 8.5v7l6-3.5z',                          // play
+    'M3 10h18v10H3z M3 10l1.5-5h16L19 10 M8 5l-2 5 M13 5l-2 5 M18 5l-2 5',            // clapperboard
+    'M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18z M12 5.6a1.8 1.8 0 1 0 0 3.6a1.8 1.8 0 1 0 0-3.6z M12 14.8a1.8 1.8 0 1 0 0 3.6a1.8 1.8 0 1 0 0-3.6z M7.4 10.2a1.8 1.8 0 1 0 0 3.6a1.8 1.8 0 1 0 0-3.6z M16.6 10.2a1.8 1.8 0 1 0 0 3.6a1.8 1.8 0 1 0 0-3.6z', // film reel
+    'M6 9h12l-1.6 12H7.6z M10 9l.4 12 M14 9l-.4 12 M6.5 9a2.6 2.6 0 0 1 3.4-3.6a2.6 2.6 0 0 1 4.2 0A2.6 2.6 0 0 1 17.5 9', // popcorn
+    'M9 2h6a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z M12 5.5a1.6 1.6 0 1 0 0 3.2a1.6 1.6 0 1 0 0-3.2z M10 13h.01 M14 13h.01 M10 16.5h.01 M14 16.5h.01', // remote
+    'M5 19a9 9 0 0 1 0-12.7L17.7 19A9 9 0 0 1 5 19z M11.4 12.6l4.6-4.6 M15 3.5a5.5 5.5 0 0 1 5.5 5.5', // satellite dish
+    'M3 7h18v3a2 2 0 0 0 0 4v3H3v-3a2 2 0 0 0 0-4z M15 7v2 M15 11v2 M15 15v2',          // ticket
+    'M4 4h16v16H4z M4 8h16 M4 16h16 M8 4v4 M12 4v4 M16 4v4 M8 16v4 M12 16v4 M16 16v4',  // film strip
+    'M2 12a10 6.5 0 1 0 20 0a10 6.5 0 1 0-20 0z M12 9.5a2.5 2.5 0 1 0 0 5a2.5 2.5 0 1 0 0-5z', // eye (watching)
+  ].map(d => new Path2D(d));
+  const LABELS = ['CH 7', 'CH 12', 'HD', '4K', 'LIVE', 'S02 E05', 'S01 E01', 'NEW', 'HDR', '1080p', 'EP 8', '▶ 2:14'];
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)');
+  let W = 0, H = 0, dpr = 1, parts = [], ink = '#fff', accent = '#9fe1cb', running = false, last = 0;
+  const mouse = {x: -1e4, y: -1e4};
+  const rnd = (a, b) => a + Math.random() * (b - a);
+
+  function colours() {
+    const cs = getComputedStyle(document.documentElement);
+    ink = cs.getPropertyValue('--text').trim() || '#fff';
+    accent = cs.getPropertyValue('--accent').trim() || '#9fe1cb';
+  }
+  function size() {
+    dpr = Math.min(2, devicePixelRatio || 1);
+    W = top.clientWidth; H = top.clientHeight;
+    canvas.width = W * dpr; canvas.height = H * dpr;
+    const want = Math.round(Math.min(46, Math.max(14, W * H / 26000)));
+    while (parts.length < want) parts.push(make());
+    parts.length = want;
+  }
+  function make() {
+    const label = Math.random() < 0.28;
+    return {
+      x: rnd(0, W), y: rnd(0, H), vx: rnd(-14, 14), vy: rnd(-9, 9), ox: 0, oy: 0,
+      r: rnd(0, Math.PI * 2), vr: rnd(-0.25, 0.25), s: rnd(18, 36),
+      icon: label ? null : ICONS[Math.floor(Math.random() * ICONS.length)],
+      text: label ? LABELS[Math.floor(Math.random() * LABELS.length)] : null,
+      a: rnd(0.16, 0.38), hue: Math.random() < 0.3 ? 'accent' : 'ink',
+    };
+  }
+  function draw(dt) {
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+    const cx = W / 2, cy = H * 0.42;
+    for (const p of parts) {
+      if (dt) {
+        p.x += p.vx * dt; p.y += p.vy * dt; p.r += p.vr * dt;
+        // step out of the mouse's way, then ease back
+        const dx = p.x + p.ox - mouse.x, dy = p.y + p.oy - mouse.y, d = Math.hypot(dx, dy);
+        if (d < 140 && d > 0.1) { const f = (140 - d) / 140 * 260 * dt; p.ox += dx / d * f; p.oy += dy / d * f; }
+        p.ox *= 1 - Math.min(1, 2.2 * dt); p.oy *= 1 - Math.min(1, 2.2 * dt);
+        const m = 60;
+        if (p.x < -m) p.x = W + m; if (p.x > W + m) p.x = -m;
+        if (p.y < -m) p.y = H + m; if (p.y > H + m) p.y = -m;
+      }
+      // quieter behind the headline and buttons
+      const nx = (p.x - cx) / (W * 0.36), ny = (p.y - cy) / (H * 0.42);
+      const fade = Math.min(1, 0.25 + Math.hypot(nx, ny) * 0.75);
+      ctx.save();
+      ctx.translate(p.x + p.ox, p.y + p.oy);
+      ctx.rotate(p.r);
+      ctx.globalAlpha = p.a * fade;
+      const c = p.hue === 'accent' ? accent : ink;
+      if (p.icon) {
+        const k = p.s / 24;
+        ctx.scale(k, k); ctx.translate(-12, -12);
+        ctx.strokeStyle = c; ctx.lineWidth = 1.6; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+        ctx.stroke(p.icon);
+      } else {
+        ctx.font = `600 ${Math.round(p.s * 0.5)}px Inter, system-ui, sans-serif`;
+        const w = ctx.measureText(p.text).width + p.s * 0.6, h = p.s * 0.85;
+        ctx.strokeStyle = c; ctx.lineWidth = 1.4;
+        ctx.beginPath(); ctx.roundRect(-w / 2, -h / 2, w, h, h * 0.3); ctx.stroke();
+        ctx.fillStyle = c; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText(p.text, 0, 1);
+      }
+      ctx.restore();
+    }
+  }
+  function frame(t) {
+    if (!running) return;
+    const dt = last ? Math.min(0.05, (t - last) / 1000) : 0;
+    last = t; draw(dt);
+    requestAnimationFrame(frame);
+  }
+  function start() { if (running || reduce.matches || document.hidden) return; running = true; last = 0; requestAnimationFrame(frame); }
+  function stop() { running = false; }
+
+  colours(); size(); draw(0);
+  new ResizeObserver(() => { size(); draw(0); }).observe(top);
+  matchMedia('(prefers-color-scheme: light)').addEventListener('change', () => { colours(); draw(0); });
+  reduce.addEventListener('change', () => reduce.matches ? stop() : start());
+  new IntersectionObserver(([e]) => e.isIntersecting ? start() : stop()).observe(top);
+  document.addEventListener('visibilitychange', () => document.hidden ? stop() : start());
+  top.addEventListener('pointermove', e => { const r = top.getBoundingClientRect(); mouse.x = e.clientX - r.left; mouse.y = e.clientY - r.top; });
+  top.addEventListener('pointerleave', () => { mouse.x = mouse.y = -1e4; });
 })();
 </script>
 </body>
