@@ -74,6 +74,10 @@ hidden apps, Features apps, photo interval and background limit. Edit, then buil
 `mockups/render.py` renders 1920×1080 layout mockups with Pillow from a photo, banners cropped
 from a TV screenshot and fonts placed in `mockups/src/` (not in the repo).
 
+## Licence
+
+The code is under the [MIT licence](LICENSE). The photos keep their own licences (below).
+
 ## Credits
 
 Photos from Wikimedia Commons Featured Pictures under their own licences:
