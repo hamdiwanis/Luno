@@ -33,7 +33,7 @@
 html{scroll-behavior:smooth}
 body{margin:0;background:var(--bg);color:var(--text);font:400 18px/1.6 Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
 a{color:inherit}
-.wrap{max-width:1280px;margin:0 auto;padding:0 28px}
+.wrap{max-width:1248px;margin:0 auto;padding:0 24px} /* content = the TV's width: min(1200px, 100vw - 48px) */
 
 /* header and hero, over drifting TV things (a canvas) */
 .masthead{position:relative;overflow:hidden}
@@ -697,87 +697,75 @@ TV=192.168.1.20:5555 ./debloat.sh             <span class="c"># do it (--restore
 })();
 </script>
 <script>
-// Drifting TV things behind the header and hero: line icons and channel / episode labels. They turn
-// slowly, wrap at the edges, step out of the mouse's way, fade behind the headline, and stop when
-// the hero is off screen or the system asks for less motion.
+// Behind the header and hero: soft 16:9 screens and app banners, and a few small dots, at three
+// depths (far ones small, faint and blurred). They drift slowly upward, shift a little with the
+// mouse for depth, and stop when the hero is off screen or the system asks for less motion.
 (() => {
-  const canvas = document.getElementById('particles'), top = canvas.parentElement, ctx = canvas.getContext('2d');
-  const ICONS = [
-    'M3 7h18v12H3z M8 3l4 4 4-4',                                                    // TV with antennas
-    'M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18z M10 8.5v7l6-3.5z',                          // play
-    'M3 10h18v10H3z M3 10l1.5-5h16L19 10 M8 5l-2 5 M13 5l-2 5 M18 5l-2 5',            // clapperboard
-    'M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18z M12 5.6a1.8 1.8 0 1 0 0 3.6a1.8 1.8 0 1 0 0-3.6z M12 14.8a1.8 1.8 0 1 0 0 3.6a1.8 1.8 0 1 0 0-3.6z M7.4 10.2a1.8 1.8 0 1 0 0 3.6a1.8 1.8 0 1 0 0-3.6z M16.6 10.2a1.8 1.8 0 1 0 0 3.6a1.8 1.8 0 1 0 0-3.6z', // film reel
-    'M6 9h12l-1.6 12H7.6z M10 9l.4 12 M14 9l-.4 12 M6.5 9a2.6 2.6 0 0 1 3.4-3.6a2.6 2.6 0 0 1 4.2 0A2.6 2.6 0 0 1 17.5 9', // popcorn
-    'M9 2h6a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z M12 5.5a1.6 1.6 0 1 0 0 3.2a1.6 1.6 0 1 0 0-3.2z M10 13h.01 M14 13h.01 M10 16.5h.01 M14 16.5h.01', // remote
-    'M5 19a9 9 0 0 1 0-12.7L17.7 19A9 9 0 0 1 5 19z M11.4 12.6l4.6-4.6 M15 3.5a5.5 5.5 0 0 1 5.5 5.5', // satellite dish
-    'M3 7h18v3a2 2 0 0 0 0 4v3H3v-3a2 2 0 0 0 0-4z M15 7v2 M15 11v2 M15 15v2',          // ticket
-    'M4 4h16v16H4z M4 8h16 M4 16h16 M8 4v4 M12 4v4 M16 4v4 M8 16v4 M12 16v4 M16 16v4',  // film strip
-    'M2 12a10 6.5 0 1 0 20 0a10 6.5 0 1 0-20 0z M12 9.5a2.5 2.5 0 1 0 0 5a2.5 2.5 0 1 0 0-5z', // eye (watching)
-  ].map(d => new Path2D(d));
-  const LABELS = ['CH 7', 'CH 12', 'HD', '4K', 'LIVE', 'S02 E05', 'S01 E01', 'NEW', 'HDR', '1080p', 'EP 8', '▶ 2:14'];
+  const canvas = document.getElementById('particles'), host = canvas.parentElement, ctx = canvas.getContext('2d');
+  const COLOURS = ['#b3261e', '#378add', '#7f77dd', '#1d9e75', '#ef9f27', '#d4537e', '#5dcaa5', '#e24b4a'];
   const reduce = matchMedia('(prefers-reduced-motion: reduce)');
-  let W = 0, H = 0, dpr = 1, parts = [], ink = '#fff', accent = '#9fe1cb', running = false, last = 0;
-  const mouse = {x: -1e4, y: -1e4};
-  const rnd = (a, b) => a + Math.random() * (b - a);
+  let W = 0, H = 0, dpr = 1, parts = [], light = false, running = false, last = 0;
+  const mouse = {x: 0, y: 0, tx: 0, ty: 0};
+  const rnd = (a, b) => a + Math.random() * (b - a), pick = a => a[Math.floor(Math.random() * a.length)];
 
-  function colours() {
-    const cs = getComputedStyle(document.documentElement);
-    ink = cs.getPropertyValue('--text').trim() || '#fff';
-    accent = cs.getPropertyValue('--accent').trim() || '#9fe1cb';
-  }
   function size() {
     dpr = Math.min(2, devicePixelRatio || 1);
-    W = top.clientWidth; H = top.clientHeight;
+    W = host.clientWidth; H = host.clientHeight;
     canvas.width = W * dpr; canvas.height = H * dpr;
-    const want = Math.round(Math.min(46, Math.max(14, W * H / 26000)));
-    while (parts.length < want) parts.push(make());
+    const want = Math.round(Math.min(34, Math.max(12, W * H / 34000)));
+    while (parts.length < want) parts.push(make(true));
     parts.length = want;
   }
-  function make() {
-    const label = Math.random() < 0.28;
+  function make(anywhere) {
+    const z = pick([0.35, 0.35, 0.6, 0.6, 1]);           // depth: 1 is nearest
+    const kind = Math.random() < 0.22 ? 'dot' : Math.random() < 0.5 ? 'screen' : 'banner';
     return {
-      x: rnd(0, W), y: rnd(0, H), vx: rnd(-14, 14), vy: rnd(-9, 9), ox: 0, oy: 0,
-      r: rnd(0, Math.PI * 2), vr: rnd(-0.25, 0.25), s: rnd(18, 36),
-      icon: label ? null : ICONS[Math.floor(Math.random() * ICONS.length)],
-      text: label ? LABELS[Math.floor(Math.random() * LABELS.length)] : null,
-      a: rnd(0.16, 0.38), hue: Math.random() < 0.3 ? 'accent' : 'ink',
+      z, kind, colour: pick(COLOURS), mark: pick(['play', 'live', 'none', 'none']),
+      x: rnd(0, W), y: anywhere ? rnd(0, H) : H + 60,
+      w: kind === 'dot' ? rnd(3, 6) * z + 2 : rnd(46, 92) * z + 18,
+      vy: -rnd(6, 14) * (0.4 + z), vx: rnd(-3, 3), phase: rnd(0, 6.28),
     };
   }
-  function draw(dt) {
+  function roundRect(x, y, w, h, r) { ctx.beginPath(); ctx.roundRect(x, y, w, h, r); }
+  function draw(dt, t) {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, W, H);
-    const cx = W / 2, cy = H * 0.42;
-    for (const p of parts) {
+    mouse.x += (mouse.tx - mouse.x) * Math.min(1, dt * 3); mouse.y += (mouse.ty - mouse.y) * Math.min(1, dt * 3);
+    const cx = W / 2, cy = H * 0.4;
+    for (const p of parts.sort((a, b) => a.z - b.z)) {
       if (dt) {
-        p.x += p.vx * dt; p.y += p.vy * dt; p.r += p.vr * dt;
-        // step out of the mouse's way, then ease back
-        const dx = p.x + p.ox - mouse.x, dy = p.y + p.oy - mouse.y, d = Math.hypot(dx, dy);
-        if (d < 140 && d > 0.1) { const f = (140 - d) / 140 * 260 * dt; p.ox += dx / d * f; p.oy += dy / d * f; }
-        p.ox *= 1 - Math.min(1, 2.2 * dt); p.oy *= 1 - Math.min(1, 2.2 * dt);
-        const m = 60;
-        if (p.x < -m) p.x = W + m; if (p.x > W + m) p.x = -m;
-        if (p.y < -m) p.y = H + m; if (p.y > H + m) p.y = -m;
+        p.y += p.vy * dt; p.x += (p.vx + Math.sin(t / 2400 + p.phase) * 4) * dt;
+        if (p.y < -120) Object.assign(p, make(false), {x: rnd(0, W)});
       }
+      const x = p.x + mouse.x * 18 * p.z, y = p.y + mouse.y * 12 * p.z;
       // quieter behind the headline and buttons
-      const nx = (p.x - cx) / (W * 0.36), ny = (p.y - cy) / (H * 0.42);
-      const fade = Math.min(1, 0.25 + Math.hypot(nx, ny) * 0.75);
+      const d = Math.hypot((x - cx) / (W * 0.34), (y - cy) / (H * 0.36));
+      const fade = Math.min(1, 0.15 + d * 0.85);
       ctx.save();
-      ctx.translate(p.x + p.ox, p.y + p.oy);
-      ctx.rotate(p.r);
-      ctx.globalAlpha = p.a * fade;
-      const c = p.hue === 'accent' ? accent : ink;
-      if (p.icon) {
-        const k = p.s / 24;
-        ctx.scale(k, k); ctx.translate(-12, -12);
-        ctx.strokeStyle = c; ctx.lineWidth = 1.6; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-        ctx.stroke(p.icon);
+      ctx.globalAlpha = (light ? 0.5 : 0.42) * (0.35 + p.z * 0.65) * fade;
+      ctx.filter = p.z < 0.5 ? 'blur(2px)' : p.z < 0.8 ? 'blur(0.6px)' : 'none';
+      if (p.kind === 'dot') {
+        ctx.fillStyle = light ? '#8a8f9c' : '#c9d2ff';
+        ctx.beginPath(); ctx.arc(x, y, p.w / 2, 0, 6.283); ctx.fill();
       } else {
-        ctx.font = `600 ${Math.round(p.s * 0.5)}px Inter, system-ui, sans-serif`;
-        const w = ctx.measureText(p.text).width + p.s * 0.6, h = p.s * 0.85;
-        ctx.strokeStyle = c; ctx.lineWidth = 1.4;
-        ctx.beginPath(); ctx.roundRect(-w / 2, -h / 2, w, h, h * 0.3); ctx.stroke();
-        ctx.fillStyle = c; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        ctx.fillText(p.text, 0, 1);
+        const w = p.w, h = w * 9 / 16, r = Math.max(4, w * 0.11);
+        if (p.kind === 'screen') {
+          // a little screen: dark glass with a soft colour glow and a thin bezel
+          const g = ctx.createLinearGradient(x, y, x + w, y + h);
+          g.addColorStop(0, p.colour); g.addColorStop(1, light ? '#2a2f45' : '#141a36');
+          ctx.fillStyle = g; roundRect(x, y, w, h, r); ctx.fill();
+          ctx.strokeStyle = light ? 'rgba(20,20,30,.35)' : 'rgba(255,255,255,.22)'; ctx.lineWidth = 1; ctx.stroke();
+        } else {
+          // an app banner: a flat colour card with a light wordmark bar
+          ctx.fillStyle = p.colour; roundRect(x, y, w, h, r); ctx.fill();
+          ctx.fillStyle = 'rgba(255,255,255,.75)'; roundRect(x + w * 0.3, y + h * 0.44, w * 0.4, Math.max(2, h * 0.12), 2); ctx.fill();
+        }
+        if (p.mark === 'play') {
+          ctx.fillStyle = 'rgba(255,255,255,.85)';
+          const s = h * 0.22; ctx.beginPath(); ctx.moveTo(x + w / 2 - s * 0.4, y + h / 2 - s / 2); ctx.lineTo(x + w / 2 + s * 0.6, y + h / 2); ctx.lineTo(x + w / 2 - s * 0.4, y + h / 2 + s / 2); ctx.fill();
+        } else if (p.mark === 'live') {
+          ctx.fillStyle = '#ff5a52'; ctx.beginPath(); ctx.arc(x + w * 0.14, y + h * 0.2, Math.max(1.6, h * 0.06), 0, 6.283); ctx.fill();
+        }
       }
       ctx.restore();
     }
@@ -785,20 +773,22 @@ TV=192.168.1.20:5555 ./debloat.sh             <span class="c"># do it (--restore
   function frame(t) {
     if (!running) return;
     const dt = last ? Math.min(0.05, (t - last) / 1000) : 0;
-    last = t; draw(dt);
+    last = t; draw(dt, t);
     requestAnimationFrame(frame);
   }
   function start() { if (running || reduce.matches || document.hidden) return; running = true; last = 0; requestAnimationFrame(frame); }
   function stop() { running = false; }
+  const scheme = matchMedia('(prefers-color-scheme: light)');
+  light = scheme.matches;
 
-  colours(); size(); draw(0);
-  new ResizeObserver(() => { size(); draw(0); }).observe(top);
-  matchMedia('(prefers-color-scheme: light)').addEventListener('change', () => { colours(); draw(0); });
+  size(); draw(0, 0);
+  new ResizeObserver(() => { size(); draw(0, 0); }).observe(host);
+  scheme.addEventListener('change', () => { light = scheme.matches; draw(0, 0); });
   reduce.addEventListener('change', () => reduce.matches ? stop() : start());
-  new IntersectionObserver(([e]) => e.isIntersecting ? start() : stop()).observe(top);
+  new IntersectionObserver(([e]) => e.isIntersecting ? start() : stop()).observe(host);
   document.addEventListener('visibilitychange', () => document.hidden ? stop() : start());
-  top.addEventListener('pointermove', e => { const r = top.getBoundingClientRect(); mouse.x = e.clientX - r.left; mouse.y = e.clientY - r.top; });
-  top.addEventListener('pointerleave', () => { mouse.x = mouse.y = -1e4; });
+  host.addEventListener('pointermove', e => { const r = host.getBoundingClientRect(); mouse.tx = (e.clientX - r.left) / r.width - 0.5; mouse.ty = (e.clientY - r.top) / r.height - 0.5; });
+  host.addEventListener('pointerleave', () => { mouse.tx = mouse.ty = 0; });
 })();
 </script>
 </body>
