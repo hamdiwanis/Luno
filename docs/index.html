@@ -8,6 +8,7 @@
 <meta property="og:title" content="Luno — a light home screen for Android TV">
 <meta property="og:description" content="Photo-first, about 16 MB on Home, arranged from the remote. Try it in your browser.">
 <meta property="og:image" content="img/01.jpg">
+<link rel="icon" type="image/svg+xml" href="logo.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
@@ -26,7 +27,7 @@ a{color:inherit}
 /* header and hero */
 header{display:flex;justify-content:space-between;align-items:center;padding:20px 0}
 .logo{display:flex;align-items:center;gap:10px;font-weight:600;font-size:18px;text-decoration:none}
-.logo i{width:26px;height:26px;border-radius:8px;background:linear-gradient(135deg,#9fe1cb,#378add);display:block}
+.logo img{width:30px;height:30px;display:block}
 nav a{color:var(--muted);text-decoration:none;font-size:14px;margin-left:22px}
 nav a:hover{color:var(--text)}
 .hero{text-align:center;padding:40px 0 28px}
@@ -39,17 +40,26 @@ nav a:hover{color:var(--text)}
 .btn svg{width:18px;height:18px}
 
 /* the TV */
-.stage{padding:18px 0 10px}
-.tvbox{position:relative;max-width:1040px;margin:0 auto}
-.tv{position:relative;aspect-ratio:16/9;border-radius:18px;overflow:hidden;background:#000;container-type:inline-size;outline:none;
-    box-shadow:0 0 0 10px #1a1b1f,0 0 0 11px #2a2b30,0 40px 80px -20px rgba(0,0,0,.8);user-select:none;cursor:default;
+/* The demo is pinned while you scroll through its section: it grows from a framed TV to the whole
+   screen (--p goes 0 to 1, set by the script), stays there for a while, then scrolls away. */
+.stage{position:relative;height:280vh;--p:0}
+.pin{position:sticky;top:0;height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;overflow:hidden}
+.blackout{position:absolute;inset:0;background:#000;opacity:var(--p);pointer-events:none}
+.tvbox{position:relative;width:var(--w,min(1040px,calc(100vw - 48px)));transform:translateY(calc(var(--rise,0) * 1px));opacity:var(--show,1)}
+.tv{position:relative;aspect-ratio:16/9;border-radius:calc(18px * (1 - var(--p)));overflow:hidden;background:#000;container-type:inline-size;outline:none;
+    box-shadow:0 0 0 calc(10px * (1 - var(--p))) #1a1b1f,0 0 0 calc(11px * (1 - var(--p))) #2a2b30,0 40px 80px -20px rgba(0,0,0,calc(.8 * (1 - var(--p))));user-select:none;cursor:default;
     --dp:.10417cqw; font-family:Inter,system-ui,sans-serif}
-.tv:focus-visible{box-shadow:0 0 0 10px #1a1b1f,0 0 0 12px #9fe1cb,0 40px 80px -20px rgba(0,0,0,.8)}
-.stand{width:22%;height:14px;margin:18px auto 0;border-radius:0 0 12px 12px;background:#1a1b1f}
-.hint{display:flex;gap:18px;justify-content:center;flex-wrap:wrap;color:var(--faint);font-size:13px;margin-top:18px}
+.stand{width:22%;height:14px;margin:18px auto 0;border-radius:0 0 12px 12px;background:#1a1b1f;opacity:calc(1 - var(--p) * 2)}
+.controls{position:relative;display:flex;align-items:center;justify-content:center;gap:10px 22px;flex-wrap:wrap;margin-top:calc(14px - 22px * var(--p));padding:0 16px}
+.hint{display:flex;gap:16px;justify-content:center;flex-wrap:wrap;color:var(--faint);font-size:13px}
 .hint kbd{font:500 12px Inter,sans-serif;color:var(--muted);border:1px solid var(--line);border-bottom-width:2px;border-radius:6px;padding:1px 7px;background:var(--bg2)}
-.demo-tools{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:14px}
-.demo-tools .btn{padding:8px 14px;font-size:13px;border-radius:10px}
+.demo-tools{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+.demo-tools .btn{padding:7px 13px;font-size:13px;border-radius:10px}
+.skip{position:fixed;right:20px;bottom:20px;z-index:50;display:inline-flex;align-items:center;gap:8px;padding:11px 16px 11px 18px;border-radius:999px;
+      background:rgba(242,242,240,.94);color:#111;border:0;font:500 14px Inter,sans-serif;cursor:pointer;box-shadow:0 10px 30px rgba(0,0,0,.45);
+      opacity:0;transform:translateY(12px);pointer-events:none;transition:opacity .25s,transform .25s}
+.skip.on{opacity:1;transform:none;pointer-events:auto}
+.skip svg{width:16px;height:16px}
 .press{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;z-index:30;background:rgba(0,0,0,.35);color:#fff;font-size:calc(var(--dp)*22);font-weight:500;border:0;cursor:pointer;transition:opacity .3s}
 .press span{background:rgba(20,20,24,.75);padding:calc(var(--dp)*14) calc(var(--dp)*26);border-radius:calc(var(--dp)*40);border:1px solid rgba(255,255,255,.2)}
 .tv:focus .press,.tv.engaged .press{opacity:0;pointer-events:none}
@@ -178,7 +188,7 @@ footer a{color:var(--muted)}
 <body>
 <div class="wrap">
   <header>
-    <a class="logo" href="#"><i></i>Luno</a>
+    <a class="logo" href="#"><img src="logo.svg" alt="">Luno</a>
     <nav><a href="#features">Features</a><a href="#light">Light by design</a><a href="#install">Install</a><a href="https://github.com/hamdiwanis/Luno">GitHub</a></nav>
   </header>
 
@@ -187,14 +197,15 @@ footer a{color:var(--muted)}
     <p>Luno is a light, photo-first home screen for Android TV and Google TV. A new photo every ten minutes, your apps in a floating dock, about 16&nbsp;MB of memory on Home.</p>
     <div class="ctas">
       <a class="btn primary" href="https://github.com/hamdiwanis/Luno/releases/latest"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v12M7 11l5 5 5-5M5 20h14"/></svg>Download the APK</a>
-      <a class="btn" href="#demo">Try it here</a>
+      <a class="btn" href="#demo" id="tryIt">Try it here</a>
     </div>
   </div>
 </div>
 
 <div class="stage" id="demo">
-  <div class="wrap">
-    <div class="tvbox">
+  <div class="pin">
+    <div class="blackout"></div>
+    <div class="tvbox" id="tvbox">
       <div class="tv" id="tv" tabindex="0" aria-label="Luno demo. Use the arrow keys, Enter, Escape and M.">
         <div class="photo" id="pa"></div><div class="photo" id="pb" style="opacity:0"></div>
         <div class="listbg"></div><div class="wash" id="wash"></div>
@@ -219,18 +230,21 @@ footer a{color:var(--muted)}
       </div>
       <div class="stand"></div>
     </div>
-    <div class="hint">
-      <span><kbd>←</kbd> <kbd>→</kbd> <kbd>↑</kbd> <kbd>↓</kbd> move</span>
-      <span><kbd>Enter</kbd> open · hold for options</span>
-      <span><kbd>Esc</kbd> back</span>
-      <span><kbd>M</kbd> Features menu</span>
-    </div>
-    <div class="demo-tools">
-      <button class="btn" id="simUpdate" type="button">Simulate an app update</button>
-      <button class="btn" id="simBt" type="button">Connect headphones</button>
+    <div class="controls">
+      <div class="hint">
+        <span><kbd>←</kbd> <kbd>→</kbd> <kbd>↑</kbd> <kbd>↓</kbd> move</span>
+        <span><kbd>Enter</kbd> open · hold for options</span>
+        <span><kbd>Esc</kbd> back</span>
+        <span><kbd>M</kbd> Features menu</span>
+      </div>
+      <div class="demo-tools">
+        <button class="btn" id="simUpdate" type="button">Simulate an app update</button>
+        <button class="btn" id="simBt" type="button">Connect headphones</button>
+      </div>
     </div>
   </div>
 </div>
+<button class="skip" id="skip" type="button">Skip the demo<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M6 13l6 6 6-6"/></svg></button>
 
 <div class="wrap">
   <section id="features">
@@ -605,7 +619,6 @@ TV=192.168.1.20:5555 ./debloat.sh             <span class="c"># do it (--restore
       if ((inDock ? 'dock' : 'sheet') !== S.area || i !== (inDock ? S.di : S.si)) { S.area = inDock ? 'dock' : 'sheet'; if (inDock) S.di = i; else S.si = i; paint(); }
     } else if (top && (S.area !== 'top' || S.ti !== +top.dataset.top)) { S.area = 'top'; S.ti = +top.dataset.top; paint(); }
   });
-  tv.addEventListener('wheel', e => { if (S.mode === 'photo' && S.area === 'dock' && e.deltaY > 30 && gridCells().length) { e.preventDefault(); S.area = 'sheet'; S.si = 0; paint(); } }, {passive: false});
 
   // ---- demo buttons
   $('simUpdate').addEventListener('click', () => {
@@ -623,6 +636,31 @@ TV=192.168.1.20:5555 ./debloat.sh             <span class="c"># do it (--restore
     S.bt = !S.bt; e.target.textContent = S.bt ? 'Disconnect headphones' : 'Connect headphones';
     paint();
   });
+
+  // ---- the demo on scroll: it grows from a framed TV to the whole screen, then stays a while
+  const stage = $('demo'), box = $('tvbox'), controls = stage.querySelector('.controls'), skip = $('skip');
+  let queued = false;
+  function layout() {
+    queued = false;
+    const vh = innerHeight, vw = document.documentElement.clientWidth, r = stage.getBoundingClientRect();
+    const p = Math.min(1, Math.max(0, -r.top / (vh * 0.7)));
+    const e = p * p * (3 - 2 * p); // ease in and out
+    const w0 = Math.min(1040, vw - 48);
+    const w1 = Math.min(vw, (vh - controls.offsetHeight - 26) * 16 / 9); // full screen, with room for the controls
+    stage.style.setProperty('--p', e.toFixed(3));
+    box.style.setProperty('--w', Math.round(w0 + (w1 - w0) * e) + 'px');
+    // coming in from below: fade and rise into place
+    const enter = Math.min(1, Math.max(0, (vh - r.top) / (vh * 0.55)));
+    box.style.setProperty('--show', (0.2 + 0.8 * enter).toFixed(3));
+    box.style.setProperty('--rise', ((1 - enter) * 70).toFixed(1));
+    skip.classList.toggle('on', r.top < vh * 0.35 && r.bottom > vh * 1.15);
+  }
+  const queue = () => { if (!queued) { queued = true; requestAnimationFrame(layout); } };
+  addEventListener('scroll', queue, {passive: true});
+  addEventListener('resize', queue);
+  skip.addEventListener('click', () => { tv.blur(); $('features').scrollIntoView({behavior: 'smooth'}); });
+  layout();
+  $('tryIt').addEventListener('click', e => { e.preventDefault(); scrollTo({top: stage.offsetTop + innerHeight * 0.75, behavior: 'smooth'}); setTimeout(() => tv.focus({preventScroll: true}), 700); });
 
   // copy buttons
   document.querySelectorAll('.copy').forEach(b => b.addEventListener('click', () => {
