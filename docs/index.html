@@ -37,7 +37,7 @@ body{margin:0;background:var(--bg);color:var(--text);font:400 18px/1.6 Inter,sys
 a{color:inherit}
 .wrap{max-width:1248px;margin:0 auto;padding:0 24px} /* content = the TV's width: min(1200px, 100vw - 48px) */
 
-/* header and hero, over drifting TV things (a canvas) */
+/* header and hero, over a dancing spectrum (a canvas) */
 .masthead{position:relative;overflow:hidden;
   background:var(--bg)}
 .masthead::after{content:"";position:absolute;left:0;right:0;bottom:0;height:36px;background:linear-gradient(transparent,var(--pagebg));pointer-events:none}
@@ -701,110 +701,45 @@ TV=192.168.1.20:5555 ./debloat.sh             <span class="c"># do it (--restore
 })();
 </script>
 <script>
-// Behind the header and hero: broadcast rings (?bg=signal, the default), or the night sky (?bg=sky),
-// or both (?bg=both). Sizes are the mockup's, scaled from its 200px-wide box to the hero.
-//  sky    — a dense field of twinkling stars, a large crescent moon at the top right with a wide
-//           glow, and a shooting star every few seconds;
-//  signal — broadcast rings rising from the TV below, in the space under the buttons (the default).
-// In light mode the sky is a dawn: a pale wash, a white crescent and a few faint stars.
-// It's still (one frame) when the system asks for less motion, and stops when the hero is off screen.
+// Behind the hero: a spectrum. A row of thin bars across the space between the buttons and the TV,
+// tallest in the middle and nothing at the edges, teal in the centre and violet outside it, dancing
+// like a sound meter. It's still (one frame) when the system asks for less motion, and stops when
+// the hero is off screen or the tab is hidden.
 (() => {
   const canvas = document.getElementById('particles'), host = canvas.parentElement, ctx = canvas.getContext('2d');
-  const mode = (new URLSearchParams(location.search).get('bg') || 'signal').toLowerCase();
-  const SKY = mode === 'sky' || mode === 'both', SIGNAL = mode === 'signal' || mode === 'both';
   const reduce = matchMedia('(prefers-reduced-motion: reduce)'), scheme = matchMedia('(prefers-color-scheme: light)');
-  let W = 0, H = 0, k = 1, dpr = 1, light = scheme.matches, running = false, stars = [], shoot = null, band = {top: 0}, moon = null;
-  const rnd = (a, b) => a + Math.random() * (b - a);
+  let W = 0, H = 0, dpr = 1, light = scheme.matches, running = false, band = {y: 0, h: 60};
 
   function size() {
     dpr = Math.min(2, devicePixelRatio || 1);
-    W = host.clientWidth; H = host.clientHeight; k = W / 200; // the mockup was 200px wide
+    W = host.clientWidth; H = host.clientHeight;
     canvas.width = W * dpr; canvas.height = H * dpr;
-    // the mockup's density: 70 stars in 200 x 125
-    // the mockup's density at night; a dawn sky keeps only the brightest few
-    const n = Math.round(Math.min(900, W * H * 70 / (200 * 125) / 2.6) * (light ? 0.22 : 1));
-    stars = Array.from({length: n}, () => ({x: rnd(0, W), y: rnd(0, H), r: rnd(0.3, 1.2), p: rnd(0, 6.28), v: rnd(0.6, 2)}));
-    // the signal: in the space between the buttons and the TV below the hero
     const hr = host.getBoundingClientRect(), ctas = host.querySelector('.ctas').getBoundingClientRect();
-    band.top = host.querySelector('.hero p').getBoundingClientRect().bottom - hr.top + 14; // they stop under the text
-  }
-  function drawSky(t) {
-    const mx = W * 0.86, my = H * 0.2, mr = 7 * Math.min(k, H / 125); // the mockup's moon (radius 7 at 200 x 125), clear of the headline
-    if (light) {
-      // dawn: a pale blue to lavender wash that thins out towards the page
-      const sky = ctx.createLinearGradient(0, 0, 0, H);
-      sky.addColorStop(0, 'rgba(178,196,236,.55)'); sky.addColorStop(0.55, 'rgba(214,200,236,.32)'); sky.addColorStop(1, 'rgba(214,200,236,0)');
-      ctx.fillStyle = sky; ctx.fillRect(0, 0, W, H);
-    }
-    const m = ctx.createRadialGradient(mx, my, 0, mx, my, W * 0.35);
-    m.addColorStop(0, light ? 'rgba(255,255,255,.75)' : 'rgba(160,180,255,.22)'); m.addColorStop(1, light ? 'rgba(255,255,255,0)' : 'rgba(160,180,255,0)');
-    ctx.fillStyle = m; ctx.fillRect(0, 0, W, H);
-    ctx.fillStyle = light ? '#7d86ab' : '#dfe6ff';
-    for (const st of stars) {
-      ctx.globalAlpha = (0.35 + 0.65 * (0.5 + 0.5 * Math.sin(t / 1000 * st.v + st.p))) * (light ? 0.5 : 1);
-      ctx.beginPath(); ctx.arc(st.x, st.y, st.r, 0, 6.283); ctx.fill();
-    }
-    ctx.globalAlpha = 1;
-    // the crescent, cut on its own canvas so the glow behind it stays whole
-    if (!moon || moon.r !== mr) {
-      const c = document.createElement('canvas'), d = Math.ceil(mr * 2 + 2);
-      c.width = c.height = d * dpr; const g = c.getContext('2d'); g.scale(dpr, dpr);
-      if (light) { g.shadowColor = 'rgba(110,120,170,.45)'; g.shadowBlur = 6; } // a soft edge on the pale sky
-      g.fillStyle = light ? '#ffffff' : '#f4f1e6'; g.beginPath(); g.arc(d / 2, d / 2, mr, 0, 6.283); g.fill();
-      g.shadowBlur = 0;
-      g.globalCompositeOperation = 'destination-out';
-      g.beginPath(); g.arc(d / 2 + mr * 0.5, d / 2 - mr * 0.36, mr * 6 / 7, 0, 6.283); g.fill();
-      moon = {c, r: mr, d};
-    }
-    ctx.drawImage(moon.c, mx - moon.d / 2, my - moon.d / 2, moon.d, moon.d);
-    // shooting stars, as often as in the mockup
-    if (!shoot && Math.random() < 0.006) shoot = {x: rnd(0, W * 0.6), y: rnd(0, H * 0.4), life: 0};
-    if (shoot) {
-      shoot.life += 0.025;
-      const x = shoot.x + shoot.life * 90 * k, y = shoot.y + shoot.life * 40 * k, dx = 30 * k, dy = 13 * k;
-      const l = ctx.createLinearGradient(x - dx, y - dy, x, y);
-      l.addColorStop(0, 'rgba(255,255,255,0)'); l.addColorStop(1, light ? `rgba(110,118,165,${(1 - shoot.life) * 0.8})` : `rgba(255,255,255,${1 - shoot.life})`);
-      ctx.strokeStyle = l; ctx.lineWidth = 1.2 * Math.min(2, k / 3); ctx.lineCap = 'round';
-      ctx.beginPath(); ctx.moveTo(x - dx, y - dy); ctx.lineTo(x, y); ctx.stroke();
-      if (shoot.life >= 1) shoot = null;
-    }
-  }
-  // The signal: broadcast rings. Round arcs rise from the top of the TV (the bottom of the hero,
-  // centre), grow and fade, alternating teal and violet, up to just under the text; a soft glow
-  // marks where they start.
-  function drawSignal(t) {
-    const rgb = light ? ['15,110,86', '83,74,183'] : ['159,225,203', '127,119,221'];
-    const cx = W / 2, cy = H, top = band.top, ry = Math.max(60, H - top), rx = Math.min(W * 0.42, ry / 0.6); // round: 0.6 as tall as wide
-    ctx.save();
-    ctx.beginPath(); ctx.rect(0, top, W, H - top); ctx.clip(); // never behind the text
-    const n = 5;
-    for (let i = 0; i < n; i++) {
-      const p = ((t / 3200) + i / n) % 1;              // 0 just sent, 1 gone
-      const e = 1 - Math.pow(1 - p, 2);                 // ease out: quick at first, then slow
-      const a = Math.pow(1 - p, 1.6) * (light ? 0.7 : 0.75);
-      ctx.strokeStyle = `rgba(${rgb[i % 2]},${a * 0.25})`; ctx.lineWidth = 6;
-      ctx.beginPath(); ctx.ellipse(cx, cy, 8 + e * rx, 4 + e * ry, 0, Math.PI, 2 * Math.PI); ctx.stroke();
-      ctx.strokeStyle = `rgba(${rgb[i % 2]},${a})`; ctx.lineWidth = 1.4;
-      ctx.stroke();
-    }
-    ctx.restore();
-    const breathe = 0.7 + 0.3 * Math.sin(t / 640), r = 46;
-    const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
-    g.addColorStop(0, `rgba(${rgb[0]},${0.6 * breathe})`); g.addColorStop(1, `rgba(${rgb[0]},0)`);
-    ctx.fillStyle = g; ctx.fillRect(cx - r, cy - r, r * 2, r);
+    const below = ctas.bottom - hr.top, room = H - below;
+    band.y = below + room * 0.5 - 6;  // centred between the buttons and the TV
+    band.h = Math.max(24, room - 44); // the tallest bar
   }
   function draw(t) {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, W, H);
-    if (SIGNAL) drawSignal(t);
-    if (SKY) drawSky(t);
+    const rgb = light ? ['15,110,86', '83,74,183'] : ['159,225,203', '127,119,221'];
+    const n = Math.max(32, Math.min(120, Math.round(W / 12))), bw = W / n;
+    ctx.lineCap = 'round';
+    ctx.lineWidth = Math.max(2, bw * 0.4);
+    for (let i = 0; i < n; i++) {
+      const u = (i + 0.5) / n, env = Math.sin(u * Math.PI);
+      const h = (0.15 + 0.85 * Math.abs(Math.sin(t / 380 + i * 0.7) * Math.sin(t / 900 + i * 0.23))) * env * band.h;
+      const x = i * bw + bw / 2;
+      ctx.strokeStyle = `rgba(${u > 0.35 && u < 0.65 ? rgb[0] : rgb[1]},${0.35 + 0.5 * env})`;
+      ctx.beginPath(); ctx.moveTo(x, band.y - h / 2); ctx.lineTo(x, band.y + h / 2); ctx.stroke();
+    }
   }
   function frame(t) { if (!running) return; draw(t); requestAnimationFrame(frame); }
   function start() { if (running || reduce.matches || document.hidden) return; running = true; requestAnimationFrame(frame); }
   function stop() { running = false; }
 
   size(); draw(1200);
-  scheme.addEventListener('change', () => { light = scheme.matches; moon = null; size(); draw(performance.now()); });
+  scheme.addEventListener('change', () => { light = scheme.matches; draw(performance.now()); });
   new ResizeObserver(() => { size(); draw(performance.now()); }).observe(host);
   reduce.addEventListener('change', () => reduce.matches ? stop() : start());
   new IntersectionObserver(([e]) => e.isIntersecting ? start() : stop()).observe(host);
