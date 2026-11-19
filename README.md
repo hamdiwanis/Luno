@@ -40,7 +40,27 @@ TV=192.168.1.20:5555 ./build.sh --install   # install on the TV and make it the 
 ```
 
 On Google TV, disable the stock launcher (and `com.google.android.tungsten.setupwraith`) so the
-Home button opens Luno.
+Home button opens Luno. `debloat.sh` does that for you.
+
+## Debloat the TV
+
+`debloat.sh` turns off the TV's preinstalled apps that Luno doesn't need, over the same adb: the
+stock Google TV home and its setup, Assistant, the screensaver, TCL's promotions, store and usage
+reporting, and preloaded streaming apps (Netflix, Prime Video, Stan, Rakuten TV and others). It
+frees memory and keeps the stock home from coming back. Install Luno first, as it replaces the
+stock home screen.
+
+```bash
+TV=192.168.1.20:5555 ./debloat.sh --dry-run   # list what would change
+TV=192.168.1.20:5555 ./debloat.sh             # disable and remove those apps
+TV=192.168.1.20:5555 ./debloat.sh --restore   # bring every one of them back
+```
+
+Nothing is deleted from the TV: disabled apps stay installed and removed apps stay in the system
+image, so `--restore` (or a factory reset) brings them back. Apps the TV doesn't have are skipped,
+so it is safe to run again. Edit the `DISABLE` and `REMOVE` lists at the top of the script to keep
+an app you use. Chromecast, screen mirroring and TV Guard aren't in it: switch them in Luno's
+Features menu.
 
 ## Settings
 
