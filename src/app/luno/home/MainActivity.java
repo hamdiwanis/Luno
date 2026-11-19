@@ -682,6 +682,12 @@ public class MainActivity extends Activity {
      */
     private Drawable artFor(App a) {
         if (a.art != null) return a.art;
+        if (a.pkg.startsWith("org.smarttube.")) {
+            a.banner = true;
+            int w = artWidth();
+            a.art = new android.graphics.drawable.BitmapDrawable(getResources(), smartTubeBanner(w, w * 9 / 16));
+            return a.art;
+        }
         PackageManager pm = getPackageManager();
         Drawable d = a.ri.activityInfo.loadBanner(pm);
         if (d == null) d = a.ri.activityInfo.applicationInfo.loadBanner(pm);
@@ -702,6 +708,53 @@ public class MainActivity extends Activity {
         d.draw(new android.graphics.Canvas(b));
         a.art = new android.graphics.drawable.BitmapDrawable(getResources(), b);
         return a.art;
+    }
+
+    /** SmartTube's banner drawn as YouTube's, with its own name. */
+    private static Bitmap smartTubeBanner(int w, int h) {
+        Bitmap b = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
+        android.graphics.Canvas c = new android.graphics.Canvas(b);
+        c.drawColor(0xFFF5F5F5);
+        android.graphics.Paint p = new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
+        Typeface word;
+        try {
+            word = Typeface.createFromFile("/system/fonts/RobotoCondensed-Bold.ttf");
+        } catch (RuntimeException e) {
+            word = Typeface.create("sans-serif-condensed", Typeface.BOLD);
+        }
+        // YouTube's banner, measured on the TV: the badge is 29% of the card's height, 1.42 times as
+        // wide as tall, the name's capitals 87% of the badge's height, after a gap of 18% of it.
+        float bh = h * 0.288f, bw = bh * 1.42f, gap = bh * 0.18f;
+        String name = "SmartTube";
+        p.setTypeface(word);
+        p.setTextSize(100);
+        android.graphics.Rect cap = new android.graphics.Rect();
+        p.getTextBounds("T", 0, 1, cap);
+        p.setTextSize(100 * bh * 0.87f / cap.height());
+        // A longer name than YouTube's: the badge stays YouTube's size and the name gets smaller,
+        // keeping a margin of 10% each side.
+        float tw = p.measureText(name), room = w * 0.80f - bw - gap;
+        if (tw > room) {
+            p.setTextSize(p.getTextSize() * room / tw);
+            tw = room;
+        }
+        float x = (w - (bw + gap + tw)) / 2f, top = (h - bh) / 2f;
+        p.setColor(0xFFFF0000);
+        c.drawRoundRect(x, top, x + bw, top + bh, bh * 0.26f, bh * 0.26f, p);
+        // The play arrow, placed as in YouTube's logo (a 28.57 x 20 badge).
+        float u = bw / 28.57f;
+        android.graphics.Path tri = new android.graphics.Path();
+        tri.moveTo(x + 11.43f * u, top + 5.72f * u);
+        tri.lineTo(x + 18.85f * u, top + 10f * u);
+        tri.lineTo(x + 11.43f * u, top + 14.29f * u);
+        tri.close();
+        android.graphics.Paint white = new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
+        white.setColor(Color.WHITE);
+        c.drawPath(tri, white);
+        p.setColor(0xFF212121);
+        p.getTextBounds("T", 0, 1, cap);
+        c.drawText(name, x + bw + gap, top + bh / 2f - cap.exactCenterY(), p);
+        return b;
     }
 
     /** The widest a card is ever drawn: a focused dock card or a focused sheet card. */
@@ -783,7 +836,9 @@ public class MainActivity extends Activity {
         });
         // Hold OK: dock apps can be moved or removed, other apps added to the dock.
         card.setOnLongClickListener(v -> {
-            if (movingPkg != null) return true;
+            // Holding OK fires this twice (our key-repeat check and the view's own long-press
+            // timer); a second menu would sit under the first and need its own click to close.
+            if (movingPkg != null || popup != null) return true;
             List<String> labels = new ArrayList<>();
             List<Runnable> acts = new ArrayList<>();
             // Apps in the list can't be moved while it's ordered by recent use.
