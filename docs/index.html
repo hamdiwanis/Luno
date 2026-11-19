@@ -60,9 +60,6 @@ nav a:hover{color:var(--text)}
       opacity:0;transform:translateY(12px);pointer-events:none;transition:opacity .25s,transform .25s}
 .skip.on{opacity:1;transform:none;pointer-events:auto}
 .skip svg{width:16px;height:16px}
-.press{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;z-index:30;background:rgba(0,0,0,.35);color:#fff;font-size:calc(var(--dp)*22);font-weight:500;border:0;cursor:pointer;transition:opacity .3s}
-.press span{background:rgba(20,20,24,.75);padding:calc(var(--dp)*14) calc(var(--dp)*26);border-radius:calc(var(--dp)*40);border:1px solid rgba(255,255,255,.2)}
-.tv:focus .press,.tv.engaged .press{opacity:0;pointer-events:none}
 
 /* inside the TV: every size is in TV dp (1920 wide = 960 dp) */
 .photo{position:absolute;inset:0;background-size:cover;background-position:center;transition:opacity 1.5s ease}
@@ -226,7 +223,6 @@ footer a{color:var(--muted)}
         <div class="app" id="app"></div>
         <div class="off" id="off">The TV is asleep · press any key</div>
         <div class="toast" id="toast"></div>
-        <button class="press" id="press" type="button"><span>Click here, then use your arrow keys</span></button>
       </div>
       <div class="stand"></div>
     </div>
@@ -571,8 +567,19 @@ TV=192.168.1.20:5555 ./debloat.sh             <span class="c"># do it (--restore
     paint();
   }
   const KEYS = {ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'up', ArrowDown: 'down', Enter: 'ok', ' ': 'ok', Escape: 'back', Backspace: 'back', m: 'menu', M: 'menu', h: 'home', H: 'home'};
-  tv.addEventListener('keydown', e => {
-    const k = KEYS[e.key]; if (!k) return;
+  // The demo takes the keys while it's on screen (no click needed), unless a button, link or field
+  // elsewhere has focus. The wheel and Skip still scroll the page.
+  const forDemo = e => {
+    if (e.metaKey || e.ctrlKey || e.altKey) return false;
+    const a = document.activeElement;
+    if (a && a !== tv && a !== document.body && !a.closest('.controls')
+        && a.matches('a,button,input,textarea,select,[contenteditable]')) return false;
+    if (a === tv) return true;
+    const r = $('demo').getBoundingClientRect(); // scrolled into the demo, and it still fills the screen
+    return r.top < innerHeight * 0.15 && r.bottom > innerHeight * 0.75;
+  };
+  addEventListener('keydown', e => {
+    const k = KEYS[e.key]; if (!k || !forDemo(e)) return;
     e.preventDefault();
     if (k === 'ok') {
       // hold OK: the card's options (like holding the remote's OK); a plain press opens the app
@@ -581,11 +588,9 @@ TV=192.168.1.20:5555 ./debloat.sh             <span class="c"># do it (--restore
     }
     key(k);
   });
-  tv.addEventListener('keyup', e => { if (KEYS[e.key] === 'ok') { if (!held) key('ok'); held = false; } });
+  addEventListener('keyup', e => { if (KEYS[e.key] === 'ok' && forDemo(e)) { if (!held) key('ok'); held = false; } });
 
   // ---- mouse
-  tv.addEventListener('focus', () => tv.classList.add('engaged'));
-  $('press').addEventListener('click', () => tv.focus());
   tv.addEventListener('click', e => {
     tv.focus();
     if (S.asleep || S.inApp) return key('back');
