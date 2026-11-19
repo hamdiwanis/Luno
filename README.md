@@ -36,6 +36,23 @@ The Features menu, network name, sleep timer and background limit use the TV's o
 `127.0.0.1:5555`). The first time, the TV asks "Allow USB debugging?" for Luno's key: tick
 **Always allow** and press **Allow**.
 
+## Download
+
+A ready-built APK is on the [Releases page](https://github.com/hamdiwanis/Luno/releases/latest)
+(Android TV / Google TV, Android 9 or later). Turn on network debugging on the TV (Settings >
+System > Developer options), then from a computer with adb:
+
+```bash
+adb connect 192.168.1.20:5555                 # your TV's address
+adb install luno-1.0.apk
+adb shell cmd package set-home-activity --user 0 app.luno.home/.MainActivity
+```
+
+Google TV has no home-screen picker, so also turn off the stock home: run `debloat.sh` (below), or
+just `adb shell pm disable-user --user 0 com.google.android.apps.tv.launcherx` and
+`com.google.android.tungsten.setupwraith`. Settings in `config.xml` (dock, apps order) need a build
+of your own; everything else can be arranged from the remote.
+
 ## Build and install
 
 Needs JDK 17 and the Android SDK (build-tools 34.0.0, platform 34). No Gradle; the code is shrunk
