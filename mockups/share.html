@@ -1,0 +1,26 @@
+<!doctype html>
+<!-- The landing page's share image (docs/img/share.jpg, 1200x630). Render it with:
+     "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless --hide-scrollbars \
+       --window-size=1200,630 --virtual-time-budget=4000 --screenshot=docs/img/share.png mockups/share.html
+     then: sips -s format jpeg -s formatOptions 85 docs/img/share.png --out docs/img/share.jpg -->
+<html><head><meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600&family=Figtree:wght@500;600&display=swap" rel="stylesheet">
+<style>
+html,body{margin:0;width:1200px;height:630px;overflow:hidden;background:#0c0d10}
+.card{position:relative;width:1200px;height:630px;background:url(../docs/img/01.jpg) 62% center/cover}
+.card::before{content:"";position:absolute;inset:0;
+  background:linear-gradient(90deg,rgba(12,13,16,.94) 0%,rgba(12,13,16,.82) 38%,rgba(12,13,16,.25) 68%,rgba(12,13,16,0) 100%)}
+.in{position:absolute;inset:0;padding:64px 72px;display:flex;flex-direction:column;justify-content:space-between;color:#f2f2f0;font-family:Figtree,sans-serif}
+.logo{display:flex;align-items:center;gap:16px;font:600 40px 'Bricolage Grotesque',sans-serif}
+.logo img{width:60px;height:60px}
+.grad{background:linear-gradient(100deg,#f4f1e6,#a9b8f2);-webkit-background-clip:text;background-clip:text;color:transparent}
+h1{font:600 70px/1.04 'Bricolage Grotesque',sans-serif;letter-spacing:-.02em;margin:0;max-width:640px}
+.facts{display:flex;gap:12px;flex-wrap:wrap}
+.facts span{font-weight:600;font-size:22px;padding:10px 18px;border-radius:999px;background:rgba(20,22,26,.72);border:1px solid rgba(255,255,255,.12)}
+.facts b{font-weight:600}
+</style></head>
+<body><div class="card"><div class="in">
+  <div class="logo"><img src="../docs/logo.svg" alt=""><span class="grad">Luno</span></div>
+  <h1>A home screen your TV can actually <span class="grad">afford.</span></h1>
+  <div class="facts"><span>Android TV &amp; Google TV</span><span>Photo-first</span><span><b class="grad">12 MB RAM</b> when idle</span></div>
+</div></div></body></html>
