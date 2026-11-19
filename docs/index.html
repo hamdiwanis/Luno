@@ -701,20 +701,19 @@ TV=192.168.1.20:5555 ./debloat.sh             <span class="c"># do it (--restore
 })();
 </script>
 <script>
-// Behind the header and hero, one of two backgrounds, as in the mockups (try ?bg=sky, ?bg=signal or
-// ?bg=both). Sizes are the mockup's, scaled from its 200px-wide box to the hero.
+// Behind the header and hero: broadcast rings (?bg=signal, the default), or the night sky (?bg=sky),
+// or both (?bg=both). Sizes are the mockup's, scaled from its 200px-wide box to the hero.
 //  sky    — a dense field of twinkling stars, a large crescent moon at the top right with a wide
 //           glow, and a shooting star every few seconds;
-//  signal — fine scan lines over the hero, and below the buttons five broadcast lines that
-//           converge on the TV, with pulses running in along them.
+//  signal — broadcast rings rising from the TV below, in the space under the buttons (the default).
 // In light mode the sky is a dawn: a pale wash, a white crescent and a few faint stars.
 // It's still (one frame) when the system asks for less motion, and stops when the hero is off screen.
 (() => {
   const canvas = document.getElementById('particles'), host = canvas.parentElement, ctx = canvas.getContext('2d');
-  const mode = (new URLSearchParams(location.search).get('bg') || 'sky').toLowerCase();
+  const mode = (new URLSearchParams(location.search).get('bg') || 'signal').toLowerCase();
   const SKY = mode === 'sky' || mode === 'both', SIGNAL = mode === 'signal' || mode === 'both';
   const reduce = matchMedia('(prefers-reduced-motion: reduce)'), scheme = matchMedia('(prefers-color-scheme: light)');
-  let W = 0, H = 0, k = 1, dpr = 1, light = scheme.matches, running = false, stars = [], shoot = null, band = {y: 0, s: 16}, moon = null;
+  let W = 0, H = 0, k = 1, dpr = 1, light = scheme.matches, running = false, stars = [], shoot = null, band = {top: 0}, moon = null;
   const rnd = (a, b) => a + Math.random() * (b - a);
 
   function size() {
@@ -727,9 +726,7 @@ TV=192.168.1.20:5555 ./debloat.sh             <span class="c"># do it (--restore
     stars = Array.from({length: n}, () => ({x: rnd(0, W), y: rnd(0, H), r: rnd(0.3, 1.2), p: rnd(0, 6.28), v: rnd(0.6, 2)}));
     // the signal: in the space between the buttons and the TV below the hero
     const hr = host.getBoundingClientRect(), ctas = host.querySelector('.ctas').getBoundingClientRect();
-    const room = H - (ctas.bottom - hr.top);
-    band.y = ctas.bottom - hr.top + room * 0.5 - 4;
-    band.s = Math.max(8, Math.min(24, room / 2 - 16));      // how far apart the lines are at the edges
+    band.top = ctas.bottom - hr.top + 10;                    // the rings stay below the buttons
   }
   function drawSky(t) {
     const mx = W * 0.86, my = H * 0.2, mr = 7 * Math.min(k, H / 125); // the mockup's moon (radius 7 at 200 x 125), clear of the headline
@@ -772,42 +769,29 @@ TV=192.168.1.20:5555 ./debloat.sh             <span class="c"># do it (--restore
       if (shoot.life >= 1) shoot = null;
     }
   }
-  // The signal: five lines that start apart and swinging at the edges and converge on one point in
-  // the middle, above the TV, with a soft glow under each; pulses run in from both edges and a
-  // small receiver dot breathes where they meet. Faint scan lines lie over the whole hero.
-  const LINES = [[0, .55], [1, .42], [2, .26], [1, .42], [0, .55]]; // [colour, strength], mirrored
-  function signalY(i, u, t) {
-    const off = i - 2, edge = Math.pow(Math.abs(u - 0.5) * 2, 1.15); // 0 in the middle, 1 at the edges
-    const wave = Math.sin(u * (7 + i * 1.3) + t / (1100 + i * 170) + i * 1.7) * band.s * 0.9
-               + Math.sin(u * 40 - t / 320 + i) * 1.1;
-    return band.y + (off * band.s + wave) * edge;
-  }
+  // The signal: broadcast rings. Arcs rise from the top of the TV (the bottom of the hero, centre),
+  // widen and fade, alternating teal and violet, kept in the space below the buttons; a soft glow
+  // marks where they start.
   function drawSignal(t) {
-    ctx.fillStyle = light ? 'rgba(20,20,18,.03)' : 'rgba(255,255,255,.03)';
-    for (let y = 0; y < H; y += 3) ctx.fillRect(0, y, W, 1);
-    const rgb = light ? ['15,110,86', '83,74,183', '60,60,55'] : ['159,225,203', '127,119,221', '255,255,255'];
-    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-    LINES.forEach(([c, a], i) => {
-      const path = new Path2D();
-      for (let x = 0; x <= W; x += 3) { const y = signalY(i, x / W, t); x ? path.lineTo(x, y) : path.moveTo(x, y); }
-      ctx.strokeStyle = `rgba(${rgb[c]},${a * 0.22})`; ctx.lineWidth = 5; ctx.stroke(path);   // glow
-      ctx.strokeStyle = `rgba(${rgb[c]},${a})`; ctx.lineWidth = 1.3; ctx.stroke(path);         // line
-      // pulses running in from both edges, fading as they arrive
-      const p = ((t / 2600) + i * 0.19) % 1, fade = Math.sin(p * Math.PI) * (1 - p * 0.4);
-      for (const u of [p * 0.5, 1 - p * 0.5]) {
-        const x = u * W, y = signalY(i, u, t), r = 14;
-        const g = ctx.createRadialGradient(x, y, 0, x, y, r);
-        g.addColorStop(0, `rgba(${rgb[c]},${0.9 * fade})`); g.addColorStop(1, `rgba(${rgb[c]},0)`);
-        ctx.fillStyle = g; ctx.fillRect(x - r, y - r, r * 2, r * 2);
-      }
-    });
-    // the receiver, where the lines meet
-    const breathe = 0.6 + 0.4 * Math.sin(t / 700), cx = W / 2, cy = band.y, r = 22 + 6 * breathe;
+    const rgb = light ? ['15,110,86', '83,74,183'] : ['159,225,203', '127,119,221'];
+    const cx = W / 2, cy = H, top = band.top, rx = W * 0.5, ry = Math.max(40, H - top);
+    ctx.save();
+    ctx.beginPath(); ctx.rect(0, top, W, H - top); ctx.clip(); // never behind the text or buttons
+    const n = 5;
+    for (let i = 0; i < n; i++) {
+      const p = ((t / 3200) + i / n) % 1;              // 0 just sent, 1 gone
+      const e = 1 - Math.pow(1 - p, 2);                 // ease out: quick at first, then slow
+      const a = Math.pow(1 - p, 1.4) * (light ? 0.6 : 0.65);
+      ctx.strokeStyle = `rgba(${rgb[i % 2]},${a * 0.25})`; ctx.lineWidth = 6;
+      ctx.beginPath(); ctx.ellipse(cx, cy, 8 + e * rx, 4 + e * ry, 0, Math.PI, 2 * Math.PI); ctx.stroke();
+      ctx.strokeStyle = `rgba(${rgb[i % 2]},${a})`; ctx.lineWidth = 1.4;
+      ctx.stroke();
+    }
+    ctx.restore();
+    const breathe = 0.7 + 0.3 * Math.sin(t / 640), r = 46;
     const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
-    g.addColorStop(0, `rgba(${rgb[0]},${0.65 * breathe})`); g.addColorStop(0.35, `rgba(${rgb[1]},${0.25 * breathe})`); g.addColorStop(1, `rgba(${rgb[1]},0)`);
-    ctx.fillStyle = g; ctx.fillRect(cx - r, cy - r, r * 2, r * 2);
-    ctx.fillStyle = light ? 'rgba(15,110,86,.9)' : 'rgba(225,255,245,.95)';
-    ctx.beginPath(); ctx.arc(cx, cy, 2.2, 0, 6.283); ctx.fill();
+    g.addColorStop(0, `rgba(${rgb[0]},${0.6 * breathe})`); g.addColorStop(1, `rgba(${rgb[0]},0)`);
+    ctx.fillStyle = g; ctx.fillRect(cx - r, cy - r, r * 2, r);
   }
   function draw(t) {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
