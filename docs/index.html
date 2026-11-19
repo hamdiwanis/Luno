@@ -132,6 +132,7 @@ nav{display:flex;align-items:center}
 .dock.dim .card:not(.f){opacity:.85}
 .card.f{transform:scale(1.1);box-shadow:inset 0 0 0 calc(var(--dp)*2.5) #fff;z-index:2}
 .card .name{font-weight:600;letter-spacing:-.01em;font-size:calc(var(--dp)*17);color:#fff;display:flex;align-items:center;gap:calc(var(--dp)*6)}
+.card .banner{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
 .card .name .dot,.app b .dot{display:inline-block;width:.32em;height:.32em;border-radius:50%;margin-left:.06em;transform:translateY(-.55em)}
 .card.moving{box-shadow:inset 0 0 0 calc(var(--dp)*2.5) #9fe1cb}
 .upd{position:absolute;inset:0;background:rgba(0,0,0,.72);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:calc(var(--dp)*7);color:#fff;font-size:calc(var(--dp)*13);font-weight:500}
@@ -337,7 +338,7 @@ TV=192.168.1.20:5555 ./debloat.sh             <span class="c"># do it (--restore
 
 <footer>
   <div class="wrap">
-    Luno is open source under the <a href="https://github.com/hamdiwanis/Luno/blob/main/LICENSE">MIT licence</a>. Photos from Wikimedia Commons under their own licences: <a href="https://github.com/hamdiwanis/Luno/blob/main/WALLPAPER-CREDITS.md">credits</a>. App names in the demo belong to their owners and are shown for illustration; Luno isn't affiliated with them.
+    Luno is open source under the <a href="https://github.com/hamdiwanis/Luno/blob/main/LICENSE">MIT licence</a>. Photos from Wikimedia Commons under their own licences: <a href="https://github.com/hamdiwanis/Luno/blob/main/WALLPAPER-CREDITS.md">credits</a>. In the demo, the TVO banners are TVO's own; other app names and banners belong to their owners and are shown for illustration only. Luno isn't affiliated with them.
   </div>
 </footer>
 
@@ -353,8 +354,10 @@ TV=192.168.1.20:5555 ./debloat.sh             <span class="c"># do it (--restore
     pad: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 8h10a5 5 0 014.9 6l-.6 3a2.5 2.5 0 01-4.3 1.2L15 16H9l-2 2.2A2.5 2.5 0 012.7 17l-.6-3A5 5 0 017 8zm0 3v1.5H5.5V14H7v1.5h1.5V14H10v-1.5H8.5V11zm9.5 0a1 1 0 100 2 1 1 0 000-2zm-2 2a1 1 0 100 2 1 1 0 000-2z"/></svg>',
   };
   // Made-up apps: banner colour, wordmark, an icon, and the wash colour of the apps list.
-  // Real apps, by name only: plain wordmarks on cards in each app's colour (no logos or banner art,
-  // which are their owners' trademarks). TVO is Luno's sibling app and keeps its own look.
+  // Real apps. An app listed in BANNERS shows docs/img/banners/<id>.png (320x180, like a TV banner);
+  // the others show a plain wordmark on a card in the app's colour. To add one, put the file there
+  // and its id here.
+  const BANNERS = ['tvo'];
   const APPS = [
     {id:'tvo', name:'TVO', bg:'#18191d', ink:'#fff', dot:'#ff3b46', wash:'#e24b4a'},
     {id:'youtube', name:'YouTube', bg:'#ff0000', ink:'#fff', wash:'#e24b4a'},
@@ -363,8 +366,6 @@ TV=192.168.1.20:5555 ./debloat.sh             <span class="c"># do it (--restore
     {id:'osn', name:'OSN+', bg:'#0b0b0f', ink:'#ff2d8a', wash:'#d4537e'},
     {id:'spotify', name:'Spotify', bg:'#1db954', ink:'#0b0b0b', wash:'#1d9e75'},
     {id:'play', name:'Play Store', bg:'#f4f4f2', ink:'#202124', wash:'#5dcaa5'},
-    {id:'tvoneo', name:'TVO Neo', bg:'#18191d', ink:'#fff', dot:'#ff3b46', wash:'#e24b4a'},
-    {id:'stc', name:'stc tv', bg:'#4f008c', ink:'#fff', wash:'#7f77dd'},
     {id:'vlc', name:'VLC', bg:'#ff8800', ink:'#fff', wash:'#ef9f27'},
     {id:'stremio', name:'Stremio', bg:'#19163a', ink:'#b9b2ff', wash:'#534ab7'},
     {id:'shahid', name:'Shahid', bg:'#0c0c0c', ink:'#22d081', wash:'#1d9e75'},
@@ -408,7 +409,7 @@ TV=192.168.1.20:5555 ./debloat.sh             <span class="c"># do it (--restore
   }
   function card(a) {
     const u = S.updating[a.id];
-    return `<div class="card" data-id="${a.id}" style="background:${a.bg};color:${a.ink}"><div class="name" style="color:${a.ink}">${a.name}${a.dot ? `<i class="dot" style="background:${a.dot}"></i>` : ''}</div>` +
+    return `<div class="card" data-id="${a.id}" style="background:${a.bg};color:${a.ink}"><div class="name" style="color:${a.ink}">${a.name}${a.dot ? `<i class="dot" style="background:${a.dot}"></i>` : ''}</div>${BANNERS.includes(a.id) ? `<img class="banner" src="img/banners/${a.id}.png" alt="">` : ''}` +
       (u != null ? `<div class="upd">Updating<i><b style="width:${Math.round(u * 100)}%"></b></i></div>` : '') + `</div>`;
   }
   function build() {
