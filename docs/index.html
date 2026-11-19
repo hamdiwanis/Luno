@@ -9,6 +9,7 @@
 <meta property="og:description" content="Photo-first, 16 MB on Home and 12 MB in the background, arranged from the remote. Try it in your browser.">
 <meta property="og:image" content="img/01.jpg">
 <link rel="icon" type="image/svg+xml" href="logo.svg">
+<script>if (!matchMedia('(prefers-reduced-motion: reduce)').matches) document.documentElement.classList.add('anim');</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..700&family=Figtree:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -54,7 +55,8 @@ header{display:flex;justify-content:space-between;align-items:center;padding:24p
 .logo{display:flex;align-items:center;gap:12px;font-weight:600;font-size:22px;text-decoration:none}
 .hl{font-weight:600;color:var(--text)} /* just a step up from the paragraph's muted grey */ /* 'memory' and the background figure in the hero */
 .sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
-.hero p.facts{min-height:3.2em;display:grid;place-items:center;font-size:clamp(20px,2.6vw,26px);color:var(--text)} /* one fact at a time, two lines kept */
+.anim .hero #lede:not(.facts){visibility:hidden;height:3.2em;overflow:hidden} /* no flash of the long paragraph */
+.hero p.facts,.anim .hero #lede{min-height:3.2em;display:grid;place-items:center;font-size:clamp(20px,2.6vw,26px);color:var(--text)} /* one fact at a time, two lines kept */
 .ch{opacity:0;filter:blur(3px);transition:opacity .28s ease,filter .28s ease} /* the hero paragraph, written in */
 .ch.on{opacity:1;filter:none}
 .caret{display:inline-block;width:2px;height:1.05em;margin:0 -3px 0 1px;vertical-align:-.16em;background:var(--accent);animation:blink 1s steps(1) infinite}
@@ -790,13 +792,13 @@ TV=192.168.1.20:5555 ./debloat.sh             <span class="c"># do it (--restore
 // reduced motion (or no script) the original paragraph stays as it is.
 (() => {
   const p = document.getElementById('lede');
-  if (!p || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  if (!p || !document.documentElement.classList.contains('anim')) return;
   const FACTS = [
-    'A light, photo-first home screen for Android TV.',
+    'A light TV launcher that uses only <b class="hl">12&nbsp;MB</b> when idle.',
+    'A photo-first home screen for Android TV.',
     'A new photo every ten minutes.',
     'Your apps in a floating dock.',
     'About 16&nbsp;MB of <b class="hl">memory</b> on Home.',
-    'Just <b class="hl">12&nbsp;MB</b> while you watch something else.',
     'Arranged from your remote: move, hide, dock.',
     'Updates show their progress right on the app.',
     'No accounts, no ads, no trackers.',
