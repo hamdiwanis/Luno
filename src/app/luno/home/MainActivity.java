@@ -95,6 +95,7 @@ public class MainActivity extends Activity {
     private String netKey;
     private boolean ssidBusy;
     private long processLimitAt;
+    private Updates updates;
 
     private static Typeface sans, sansMedium;
 
@@ -143,6 +144,8 @@ public class MainActivity extends Activity {
         pf.addAction(Intent.ACTION_PACKAGE_CHANGED);
         pf.addDataScheme("package");
         registerReceiver(packages, pf);
+        updates = new Updates(this, this::showUpdates);
+        updates.start();
         watchNetwork();
         listMode = getPreferences(MODE_PRIVATE).getBoolean("list", false);
         applyMode();
@@ -204,6 +207,7 @@ public class MainActivity extends Activity {
     protected void onDestroy() {
         super.onDestroy();
         try { unregisterReceiver(packages); } catch (Exception ignored) { }
+        if (updates != null) updates.stop();
         if (netCallback != null) {
             try { getSystemService(ConnectivityManager.class).unregisterNetworkCallback(netCallback); }
             catch (Exception ignored) { }
@@ -528,6 +532,36 @@ public class MainActivity extends Activity {
         releaseSheet();
         if (sheet.getVisibility() == View.VISIBLE) buildSheet(sheetApps);
         lastDockIndex = Math.min(lastDockIndex, Math.max(0, dockTiles.size() - 1));
+        showUpdates();
+    }
+
+    /** Darkens the cards of apps being updated, with "Updating" and their progress; clears the rest. */
+    private void showUpdates() {
+        if (updates == null) return;
+        boolean any = updates.any();
+        for (List<View> tiles : Arrays.asList(dockTiles, sheetTiles)) {
+            for (View t : tiles) {
+                if (!(t instanceof FrameLayout) || !(t.getTag() instanceof App)) continue;
+                FrameLayout card = (FrameLayout) t;
+                Updates.Overlay o = null;
+                for (int i = 0; i < card.getChildCount(); i++) {
+                    View c = card.getChildAt(i);
+                    if (c instanceof Updates.Overlay && c.getTag() == null) o = (Updates.Overlay) c; // tagged: fading out
+                }
+                float p = any ? updates.of(((App) t.getTag()).pkg) : -1;
+                if (p >= 0) {
+                    if (o == null) {
+                        o = new Updates.Overlay(this, sansMedium());
+                        card.addView(o, full());
+                    }
+                    o.setProgress(p);
+                } else if (o != null) {
+                    Updates.Overlay gone = o;
+                    gone.setTag("gone");
+                    gone.animate().alpha(0f).setDuration(200).withEndAction(() -> card.removeView(gone)).start();
+                }
+            }
+        }
     }
 
     /** The apps sheet's tiles, built when it opens (their art is loaded then, not at start). */
@@ -558,6 +592,7 @@ public class MainActivity extends Activity {
             t.setNextFocusDownId(below < n ? sheetTiles.get(below).getId()
                     : nextRow ? sheetTiles.get(n - 1).getId() : t.getId());
         }
+        showUpdates();
     }
 
     /** Drops the sheet's tiles and their art; it's rebuilt the next time it opens. */

@@ -19,6 +19,8 @@ about 16 MB of its own memory on Home and 12 MB while another app is in front.
 - **Two homes** (Features > Home): **Photo**, the photo with the dock, or **Apps list**, no photo, every
   app as a banner in one grid, the focused app's name large at the bottom and the lower screen washed
   in its colours. The apps list uses about half the memory (about 13 MB).
+- **Updates shown on the apps**: an app being installed or updated (Play Store or any other) is
+  darkened, with "Updating" and its progress, until it's done.
 - **Features menu** (top bar, or the remote's Menu key): switch apps such as Chromecast, screen
   mirroring or TV Guard on and off.
 - **Network name** shown without turning Location on.
