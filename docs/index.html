@@ -19,7 +19,7 @@
   --accent:#9fe1cb; --stagebg:#000; --tvshadow:rgba(0,0,0,.8);
   --code-bg:#0a0b0d; --code-text:#d8d8d4; --code-c:#6b6e75;
   color-scheme:dark;
-  --pagebg:#0c0d10; /* the page's background, for the hero's fade (the hero itself is always dark) */
+  --pagebg:#0c0d10; /* the page's background, for the hero's fade */
 }
 @media (prefers-color-scheme: light){
   :root{
@@ -39,9 +39,7 @@ a{color:inherit}
 
 /* header and hero, over drifting TV things (a canvas) */
 .masthead{position:relative;overflow:hidden;
-  --bg:#0c0d10; --bg2:#14161a; --card:#1b1d22; --line:rgba(255,255,255,.09);
-  --text:#f2f2f0; --muted:rgba(242,242,240,.62); --faint:rgba(242,242,240,.4); --accent:#9fe1cb;
-  background:var(--bg);color:var(--text);color-scheme:dark}
+  background:var(--bg)}
 .masthead::after{content:"";position:absolute;left:0;right:0;bottom:0;height:90px;background:linear-gradient(transparent,var(--pagebg));pointer-events:none}
 #particles{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
 .masthead .wrap{position:relative;z-index:1}
@@ -51,7 +49,7 @@ header{display:flex;justify-content:space-between;align-items:center;padding:24p
 .logo img{width:38px;height:38px;display:block}
 nav a{color:var(--muted);text-decoration:none;font-size:16px;margin-left:26px}
 nav a:hover{color:var(--text)}
-.hero{text-align:center;padding:52px 0 128px} /* room for the night sky to fade into the page */
+.hero{text-align:center;padding:52px 0 96px} /* room for the background to fade into the page */
 .hero h1{font-size:clamp(40px,6.4vw,76px);line-height:1.05;letter-spacing:-.02em;font-weight:600;margin:0 0 16px}
 .hero p{color:var(--muted);font-size:clamp(18px,2.2vw,22px);max-width:760px;margin:0 auto 32px}
 .ctas{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
@@ -709,13 +707,14 @@ TV=192.168.1.20:5555 ./debloat.sh             <span class="c"># do it (--restore
 //           glow, and a shooting star every few seconds;
 //  signal — fine scan lines over the hero and three wavy broadcast lines in the gap above the
 //           headline, swinging most in the middle.
+// In light mode the sky is a dawn: a pale wash, a white crescent and a few faint stars.
 // It's still (one frame) when the system asks for less motion, and stops when the hero is off screen.
 (() => {
   const canvas = document.getElementById('particles'), host = canvas.parentElement, ctx = canvas.getContext('2d');
   const mode = (new URLSearchParams(location.search).get('bg') || 'sky').toLowerCase();
   const SKY = mode === 'sky' || mode === 'both', SIGNAL = mode === 'signal' || mode === 'both';
   const reduce = matchMedia('(prefers-reduced-motion: reduce)'), scheme = matchMedia('(prefers-color-scheme: light)');
-  let W = 0, H = 0, k = 1, dpr = 1, light = false, running = false, stars = [], shoot = null, band = {y: 0, k: 1}, moon = null;
+  let W = 0, H = 0, k = 1, dpr = 1, light = scheme.matches, running = false, stars = [], shoot = null, band = {y: 0, k: 1}, moon = null;
   const rnd = (a, b) => a + Math.random() * (b - a);
 
   function size() {
@@ -723,7 +722,8 @@ TV=192.168.1.20:5555 ./debloat.sh             <span class="c"># do it (--restore
     W = host.clientWidth; H = host.clientHeight; k = W / 200; // the mockup was 200px wide
     canvas.width = W * dpr; canvas.height = H * dpr;
     // the mockup's density: 70 stars in 200 x 125
-    const n = Math.round(Math.min(900, W * H * 70 / (200 * 125) / 2.6));
+    // the mockup's density at night; a dawn sky keeps only the brightest few
+    const n = Math.round(Math.min(900, W * H * 70 / (200 * 125) / 2.6) * (light ? 0.22 : 1));
     stars = Array.from({length: n}, () => ({x: rnd(0, W), y: rnd(0, H), r: rnd(0.3, 1.2), p: rnd(0, 6.28), v: rnd(0.6, 2)}));
     // the signal band: centred in the gap between the header and the headline
     const hr = host.getBoundingClientRect(), head = host.querySelector('header').getBoundingClientRect(), h1 = host.querySelector('h1').getBoundingClientRect();
@@ -733,12 +733,18 @@ TV=192.168.1.20:5555 ./debloat.sh             <span class="c"># do it (--restore
   }
   function drawSky(t) {
     const mx = W * 0.86, my = H * 0.2, mr = 7 * Math.min(k, H / 125); // the mockup's moon (radius 7 at 200 x 125), clear of the headline
+    if (light) {
+      // dawn: a pale blue to lavender wash that thins out towards the page
+      const sky = ctx.createLinearGradient(0, 0, 0, H);
+      sky.addColorStop(0, 'rgba(178,196,236,.55)'); sky.addColorStop(0.55, 'rgba(214,200,236,.32)'); sky.addColorStop(1, 'rgba(214,200,236,0)');
+      ctx.fillStyle = sky; ctx.fillRect(0, 0, W, H);
+    }
     const m = ctx.createRadialGradient(mx, my, 0, mx, my, W * 0.35);
-    m.addColorStop(0, light ? 'rgba(150,140,110,.2)' : 'rgba(160,180,255,.22)'); m.addColorStop(1, 'rgba(160,180,255,0)');
+    m.addColorStop(0, light ? 'rgba(255,255,255,.75)' : 'rgba(160,180,255,.22)'); m.addColorStop(1, light ? 'rgba(255,255,255,0)' : 'rgba(160,180,255,0)');
     ctx.fillStyle = m; ctx.fillRect(0, 0, W, H);
-    ctx.fillStyle = light ? '#566070' : '#dfe6ff';
+    ctx.fillStyle = light ? '#7d86ab' : '#dfe6ff';
     for (const st of stars) {
-      ctx.globalAlpha = (0.35 + 0.65 * (0.5 + 0.5 * Math.sin(t / 1000 * st.v + st.p))) * (light ? 0.55 : 1);
+      ctx.globalAlpha = (0.35 + 0.65 * (0.5 + 0.5 * Math.sin(t / 1000 * st.v + st.p))) * (light ? 0.5 : 1);
       ctx.beginPath(); ctx.arc(st.x, st.y, st.r, 0, 6.283); ctx.fill();
     }
     ctx.globalAlpha = 1;
@@ -746,7 +752,9 @@ TV=192.168.1.20:5555 ./debloat.sh             <span class="c"># do it (--restore
     if (!moon || moon.r !== mr) {
       const c = document.createElement('canvas'), d = Math.ceil(mr * 2 + 2);
       c.width = c.height = d * dpr; const g = c.getContext('2d'); g.scale(dpr, dpr);
-      g.fillStyle = '#f4f1e6'; g.beginPath(); g.arc(d / 2, d / 2, mr, 0, 6.283); g.fill();
+      if (light) { g.shadowColor = 'rgba(110,120,170,.45)'; g.shadowBlur = 6; } // a soft edge on the pale sky
+      g.fillStyle = light ? '#ffffff' : '#f4f1e6'; g.beginPath(); g.arc(d / 2, d / 2, mr, 0, 6.283); g.fill();
+      g.shadowBlur = 0;
       g.globalCompositeOperation = 'destination-out';
       g.beginPath(); g.arc(d / 2 + mr * 0.5, d / 2 - mr * 0.36, mr * 6 / 7, 0, 6.283); g.fill();
       moon = {c, r: mr, d};
@@ -758,7 +766,7 @@ TV=192.168.1.20:5555 ./debloat.sh             <span class="c"># do it (--restore
       shoot.life += 0.025;
       const x = shoot.x + shoot.life * 90 * k, y = shoot.y + shoot.life * 40 * k, dx = 30 * k, dy = 13 * k;
       const l = ctx.createLinearGradient(x - dx, y - dy, x, y);
-      l.addColorStop(0, 'rgba(255,255,255,0)'); l.addColorStop(1, light ? `rgba(80,85,100,${(1 - shoot.life) * 0.7})` : `rgba(255,255,255,${1 - shoot.life})`);
+      l.addColorStop(0, 'rgba(255,255,255,0)'); l.addColorStop(1, light ? `rgba(110,118,165,${(1 - shoot.life) * 0.8})` : `rgba(255,255,255,${1 - shoot.life})`);
       ctx.strokeStyle = l; ctx.lineWidth = 1.2 * Math.min(2, k / 3); ctx.lineCap = 'round';
       ctx.beginPath(); ctx.moveTo(x - dx, y - dy); ctx.lineTo(x, y); ctx.stroke();
       if (shoot.life >= 1) shoot = null;
@@ -767,7 +775,7 @@ TV=192.168.1.20:5555 ./debloat.sh             <span class="c"># do it (--restore
   function drawSignal(t) {
     ctx.fillStyle = light ? 'rgba(20,20,18,.035)' : 'rgba(255,255,255,.035)';
     for (let y = 0; y < H; y += 3) ctx.fillRect(0, y, W, 1);
-    const cols = light ? ['rgba(15,110,86,.55)', 'rgba(83,74,183,.4)', 'rgba(40,40,36,.22)'] : ['rgba(159,225,203,.5)', 'rgba(127,119,221,.35)', 'rgba(255,255,255,.18)'];
+    const cols = light ? ['rgba(15,110,86,.6)', 'rgba(83,74,183,.45)', 'rgba(40,40,36,.25)'] : ['rgba(159,225,203,.5)', 'rgba(127,119,221,.35)', 'rgba(255,255,255,.18)'];
     const b = band.k;
     for (let n = 0; n < 3; n++) {
       ctx.strokeStyle = cols[n]; ctx.lineWidth = 1.1 * Math.min(1.6, Math.max(1, b / 3)); ctx.beginPath();
@@ -790,6 +798,7 @@ TV=192.168.1.20:5555 ./debloat.sh             <span class="c"># do it (--restore
   function stop() { running = false; }
 
   size(); draw(1200);
+  scheme.addEventListener('change', () => { light = scheme.matches; moon = null; size(); draw(performance.now()); });
   new ResizeObserver(() => { size(); draw(performance.now()); }).observe(host);
   reduce.addEventListener('change', () => reduce.matches ? stop() : start());
   new IntersectionObserver(([e]) => e.isIntersecting ? start() : stop()).observe(host);
