@@ -726,7 +726,7 @@ TV=192.168.1.20:5555 ./debloat.sh             <span class="c"># do it (--restore
     stars = Array.from({length: n}, () => ({x: rnd(0, W), y: rnd(0, H), r: rnd(0.3, 1.2), p: rnd(0, 6.28), v: rnd(0.6, 2)}));
     // the signal: in the space between the buttons and the TV below the hero
     const hr = host.getBoundingClientRect(), ctas = host.querySelector('.ctas').getBoundingClientRect();
-    band.top = ctas.bottom - hr.top + 10;                    // the rings stay below the buttons
+    band.top = host.querySelector('.hero p').getBoundingClientRect().bottom - hr.top + 14; // they stop under the text
   }
   function drawSky(t) {
     const mx = W * 0.86, my = H * 0.2, mr = 7 * Math.min(k, H / 125); // the mockup's moon (radius 7 at 200 x 125), clear of the headline
@@ -769,19 +769,19 @@ TV=192.168.1.20:5555 ./debloat.sh             <span class="c"># do it (--restore
       if (shoot.life >= 1) shoot = null;
     }
   }
-  // The signal: broadcast rings. Arcs rise from the top of the TV (the bottom of the hero, centre),
-  // widen and fade, alternating teal and violet, kept in the space below the buttons; a soft glow
+  // The signal: broadcast rings. Round arcs rise from the top of the TV (the bottom of the hero,
+  // centre), grow and fade, alternating teal and violet, up to just under the text; a soft glow
   // marks where they start.
   function drawSignal(t) {
     const rgb = light ? ['15,110,86', '83,74,183'] : ['159,225,203', '127,119,221'];
-    const cx = W / 2, cy = H, top = band.top, rx = W * 0.5, ry = Math.max(40, H - top);
+    const cx = W / 2, cy = H, top = band.top, ry = Math.max(60, H - top), rx = Math.min(W * 0.42, ry / 0.6); // round: 0.6 as tall as wide
     ctx.save();
-    ctx.beginPath(); ctx.rect(0, top, W, H - top); ctx.clip(); // never behind the text or buttons
+    ctx.beginPath(); ctx.rect(0, top, W, H - top); ctx.clip(); // never behind the text
     const n = 5;
     for (let i = 0; i < n; i++) {
       const p = ((t / 3200) + i / n) % 1;              // 0 just sent, 1 gone
       const e = 1 - Math.pow(1 - p, 2);                 // ease out: quick at first, then slow
-      const a = Math.pow(1 - p, 1.4) * (light ? 0.6 : 0.65);
+      const a = Math.pow(1 - p, 1.6) * (light ? 0.7 : 0.75);
       ctx.strokeStyle = `rgba(${rgb[i % 2]},${a * 0.25})`; ctx.lineWidth = 6;
       ctx.beginPath(); ctx.ellipse(cx, cy, 8 + e * rx, 4 + e * ry, 0, Math.PI, 2 * Math.PI); ctx.stroke();
       ctx.strokeStyle = `rgba(${rgb[i % 2]},${a})`; ctx.lineWidth = 1.4;
