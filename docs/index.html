@@ -716,7 +716,7 @@ TV=192.168.1.20:5555 ./debloat.sh             <span class="c"># do it (--restore
     canvas.width = W * dpr; canvas.height = H * dpr;
     const hr = host.getBoundingClientRect(), ctas = host.querySelector('.ctas').getBoundingClientRect();
     const below = ctas.bottom - hr.top, room = H - below;
-    band.y = below + room * 0.5 - 6;  // centred between the buttons and the TV
+    band.y = below + room * 0.5 + 14; // a little below the middle, nearer the TV
     band.h = Math.max(24, room - 44); // the tallest bar
   }
   function draw(t) {
