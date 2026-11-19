@@ -16,7 +16,11 @@
 :root{
   --bg:#0c0d10; --bg2:#14161a; --card:#1b1d22; --line:rgba(255,255,255,.09);
   --text:#f2f2f0; --muted:rgba(242,242,240,.62); --faint:rgba(242,242,240,.4);
-  --accent:#9fe1cb; --stagebg:#000; --tvshadow:rgba(0,0,0,.8);
+  --accent:#9fb0f0; --stagebg:#000; --tvshadow:rgba(0,0,0,.8);
+  /* the logo's colours: night-sky screen and moon */
+  --brand:#3b4f8f; --brand-deep:#141a36; --moon:#f4f1e6;
+  --wm1:#f4f1e6; --wm2:#a9b8f2; --glow:rgba(59,79,143,.32);
+  --bar-mid:244,241,230; --bar-out:125,147,220;
   --code-bg:#0a0b0d; --code-text:#d8d8d4; --code-c:#6b6e75;
   color-scheme:dark;
   --pagebg:#0c0d10; /* the page's background, for the hero's fade */
@@ -25,7 +29,9 @@
   :root{
     --bg:#f6f5f1; --bg2:#ffffff; --card:#efeee9; --line:rgba(20,20,18,.11);
     --text:#151513; --muted:rgba(21,21,19,.68); --faint:rgba(21,21,19,.48);
-    --accent:#0f6e56; --stagebg:#e6e5df; --tvshadow:rgba(30,30,25,.35);
+    --accent:#3b4f8f; --stagebg:#e6e5df; --tvshadow:rgba(30,30,25,.35);
+    --wm1:#3b4f8f; --wm2:#141a36; --glow:rgba(59,79,143,.16);
+    --bar-mid:20,26,54; --bar-out:59,79,143;
     --code-bg:#f1f0eb; --code-text:#2a2a27; --code-c:#8a8a84;
     color-scheme:light;
     --pagebg:#f6f5f1;
@@ -38,23 +44,25 @@ a{color:inherit}
 .wrap{max-width:1248px;margin:0 auto;padding:0 24px} /* content = the TV's width: min(1200px, 100vw - 48px) */
 
 /* header and hero, over a dancing spectrum (a canvas) */
-.masthead{position:relative;overflow:hidden;
-  background:var(--bg)}
-.masthead::after{content:"";position:absolute;left:0;right:0;bottom:0;height:20px;background:linear-gradient(transparent,var(--pagebg));pointer-events:none}
-#particles{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+.masthead{position:relative}
+#particles{position:absolute;left:0;top:0;width:100%;pointer-events:none} /* height: down to the TV frame (script) */
 .masthead .wrap{position:relative;z-index:1}
 /* header and hero */
 header{display:flex;justify-content:space-between;align-items:center;padding:24px 0}
 .logo{display:flex;align-items:center;gap:12px;font-weight:600;font-size:22px;text-decoration:none}
+.brandtext{background:linear-gradient(100deg,var(--wm1),var(--wm2));-webkit-background-clip:text;background-clip:text;color:transparent}
 .logo img{width:38px;height:38px;display:block}
 nav a{color:var(--muted);text-decoration:none;font-size:16px;margin-left:26px}
-nav a:hover{color:var(--text)}
-.hero{text-align:center;padding:52px 0 164px} /* room under the buttons for the signal, and the fade */
+nav a:hover{color:var(--accent)}
+nav a.pill{color:var(--moon);background:linear-gradient(135deg,var(--brand),var(--brand-deep));padding:8px 16px;border-radius:999px;border:1px solid rgba(255,255,255,.08)}
+nav a.pill:hover{color:#fff;filter:brightness(1.12)}
+nav{display:flex;align-items:center}
+.hero{text-align:center;padding:52px 0 140px} /* room around the spectrum, below the buttons */ /* room under the buttons for the signal, and the fade */
 .hero h1{font-size:clamp(40px,6.4vw,76px);line-height:1.05;letter-spacing:-.02em;font-weight:600;margin:0 0 16px}
 .hero p{color:var(--muted);font-size:clamp(18px,2.2vw,22px);max-width:760px;margin:0 auto 32px}
 .ctas{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
 .btn{display:inline-flex;align-items:center;gap:9px;padding:14px 24px;border-radius:14px;font-weight:500;font-size:17px;text-decoration:none;border:1px solid var(--line);background:var(--card);cursor:pointer;color:var(--text)}
-.btn.primary{background:var(--text);color:var(--bg);border-color:transparent}
+.btn.primary{background:linear-gradient(135deg,#4a60a8,var(--brand-deep));color:var(--moon);border-color:rgba(255,255,255,.08)}
 .btn:hover{filter:brightness(1.08)}
 .btn svg{width:20px;height:20px}
 
@@ -207,12 +215,12 @@ footer a{color:var(--muted)}
 <canvas id="particles" aria-hidden="true"></canvas>
 <div class="wrap">
   <header>
-    <a class="logo" href="#"><img src="logo.svg" alt="">Luno</a>
-    <nav><a href="#features">Features</a><a href="#light">Light by design</a><a href="#install">Install</a><a href="https://github.com/hamdiwanis/Luno">GitHub</a></nav>
+    <a class="logo" href="#"><img src="logo.svg" alt=""><span class="brandtext">Luno</span></a>
+    <nav><a href="#features">Features</a><a href="#light">Light by design</a><a href="#install">Install</a><a class="pill" href="https://github.com/hamdiwanis/Luno">GitHub</a></nav>
   </header>
 
   <div class="hero">
-    <h1>A home screen your TV<br>can actually afford.</h1>
+    <h1>A home screen your TV<br>can actually <span class="brandtext">afford.</span></h1>
     <p>Luno is a light, photo-first home screen for Android TV and Google TV. A new photo every ten minutes, your apps in a floating dock, about 16&nbsp;MB of memory on Home.</p>
     <div class="ctas">
       <a class="btn primary" href="https://github.com/hamdiwanis/Luno/releases/latest"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v12M7 11l5 5 5-5M5 20h14"/></svg>Download the APK</a>
@@ -702,8 +710,8 @@ TV=192.168.1.20:5555 ./debloat.sh             <span class="c"># do it (--restore
 </script>
 <script>
 // Behind the hero: a spectrum. A row of thin bars across the space between the buttons and the TV,
-// tallest in the middle and nothing at the edges, teal in the centre and violet outside it, dancing
-// like a sound meter. It's still (one frame) when the system asks for less motion, and stops when
+// tallest in the middle and nothing at the edges, in the logo's colours (moon or navy in the centre, its blue outside),
+// dancing like a sound meter. It's still (one frame) when the system asks for less motion, and stops when
 // the hero is off screen or the tab is hidden.
 (() => {
   const canvas = document.getElementById('particles'), host = canvas.parentElement, ctx = canvas.getContext('2d');
@@ -712,18 +720,28 @@ TV=192.168.1.20:5555 ./debloat.sh             <span class="c"># do it (--restore
 
   function size() {
     dpr = Math.min(2, devicePixelRatio || 1);
-    W = host.clientWidth; H = host.clientHeight;
-    canvas.width = W * dpr; canvas.height = H * dpr;
+    // exactly halfway between the hero's buttons and the top of the TV's frame (its 11px bezel),
+    // as the TV is shown at the top of the page
     const hr = host.getBoundingClientRect(), ctas = host.querySelector('.ctas').getBoundingClientRect();
-    const below = ctas.bottom - hr.top, room = H - below;
-    band.h = Math.max(24, Math.min(88, room - 60)); // the tallest bar
-    band.y = below + 92;                             // well below the buttons, near the TV
+    const below = ctas.bottom - hr.top, frame = document.getElementById('tvbox').getBoundingClientRect().top - 11 - hr.top;
+    const gap = Math.max(40, frame - below);
+    band.y = below + gap / 2;
+    band.h = Math.max(20, Math.min(88, gap - 36));   // the tallest bar
+    W = host.clientWidth; H = Math.ceil(frame);
+    canvas.style.height = H + 'px';
+    canvas.width = W * dpr; canvas.height = H * dpr;
   }
   function draw(t) {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, W, H);
-    const rgb = light ? ['15,110,86', '83,74,183'] : ['159,225,203', '127,119,221'];
+    const cs = getComputedStyle(document.documentElement); // the logo's colours
+    const rgb = [cs.getPropertyValue('--bar-mid').trim(), cs.getPropertyValue('--bar-out').trim()];
     const n = Math.max(32, Math.min(120, Math.round(W / 12))), bw = W / n;
+    // a soft glow of the logo's blue around the bars, wider than tall
+    ctx.save(); ctx.translate(W / 2, band.y); ctx.scale(1, 0.4);
+    const glow = ctx.createRadialGradient(0, 0, 0, 0, 0, W * 0.34);
+    glow.addColorStop(0, cs.getPropertyValue('--glow').trim()); glow.addColorStop(1, 'rgba(59,79,143,0)');
+    ctx.fillStyle = glow; ctx.fillRect(-W / 2, -W * 0.34, W, W * 0.68); ctx.restore();
     ctx.lineCap = 'round';
     ctx.lineWidth = Math.max(2, bw * 0.4);
     for (let i = 0; i < n; i++) {
@@ -741,6 +759,7 @@ TV=192.168.1.20:5555 ./debloat.sh             <span class="c"># do it (--restore
   size(); draw(1200);
   scheme.addEventListener('change', () => { light = scheme.matches; draw(performance.now()); });
   new ResizeObserver(() => { size(); draw(performance.now()); }).observe(host);
+  addEventListener('resize', () => { size(); draw(performance.now()); }); // the TV's place follows the window
   reduce.addEventListener('change', () => reduce.matches ? stop() : start());
   new IntersectionObserver(([e]) => e.isIntersecting ? start() : stop()).observe(host);
   document.addEventListener('visibilitychange', () => document.hidden ? stop() : start());
