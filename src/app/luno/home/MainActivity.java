@@ -96,6 +96,19 @@ public class MainActivity extends Activity {
     private boolean ssidBusy;
     private long processLimitAt;
     private Updates updates;
+    private Bluetooth bluetooth;
+    private View btChip;
+    private TextView btName;
+
+    /** Apps hidden from the remote (hold OK > Hide), on top of config.xml's hidden_apps. */
+    private final Set<String> userHidden = new HashSet<>();
+    /** Every shown app, A to Z (for choosers). */
+    private List<App> allApps = new ArrayList<>();
+    /** Apps list order: most recently opened first, instead of the saved order (Features). */
+    private boolean recentFirst;
+    /** An app was opened with recentFirst on: reorder when Home comes back. */
+    private boolean reorder;
+    private final Runnable powerOnTask = this::openPowerOnApp;
 
     private static Typeface sans, sansMedium;
 
@@ -129,6 +142,9 @@ public class MainActivity extends Activity {
         if (savedApps != null) appsFirst = savedApps.isEmpty() ? new String[0] : savedApps.split(",");
         hidden.addAll(Arrays.asList(getResources().getStringArray(R.array.hidden_apps)));
         hidden.add(getPackageName());
+        String userHid = getPreferences(MODE_PRIVATE).getString("hidden_user", "");
+        if (!userHid.isEmpty()) userHidden.addAll(Arrays.asList(userHid.split(",")));
+        recentFirst = getPreferences(MODE_PRIVATE).getBoolean("recent_first", false);
         photoMs = Math.max(1, getResources().getInteger(R.integer.photo_minutes)) * 60_000L;
         try {
             photos = getAssets().list("wallpapers");
@@ -146,6 +162,18 @@ public class MainActivity extends Activity {
         registerReceiver(packages, pf);
         updates = new Updates(this, this::showUpdates);
         updates.start();
+        IntentFilter sf = new IntentFilter(Intent.ACTION_SCREEN_ON);
+        sf.addAction(Intent.ACTION_SCREEN_OFF);
+        registerReceiver(screen, sf);
+        bluetooth = new Bluetooth(this, this::updateBt);
+        bluetooth.start();
+        // This TV turns on with a full boot: open the power-on app once per boot, only when Home
+        // starts with the boot itself (not when Home is first opened minutes later).
+        int boot = Settings.Global.getInt(getContentResolver(), Settings.Global.BOOT_COUNT, -1);
+        if (boot != getPreferences(MODE_PRIVATE).getInt("boot", -2)) {
+            getPreferences(MODE_PRIVATE).edit().putInt("boot", boot).apply();
+            if (SystemClock.elapsedRealtime() < 90_000L) handler.postDelayed(powerOnTask, 2000);
+        }
         watchNetwork();
         listMode = getPreferences(MODE_PRIVATE).getBoolean("list", false);
         applyMode();
@@ -168,7 +196,10 @@ public class MainActivity extends Activity {
             handler.postDelayed(nextPhotoTask, Math.max(1000, photoMs - since));
         }
         android.content.pm.ChangedPackages changed = getPackageManager().getChangedPackages(packageSeq);
-        if (changed != null) buildApps();
+        if (changed != null || reorder) {
+            reorder = false;
+            buildApps();
+        }
         reapplyProcessLimit();
         if (popup == null && (listMode ? !sheetTiles.contains(getCurrentFocus()) : sheet.getVisibility() != View.VISIBLE)) {
             focusDock(lastDockIndex);
@@ -208,6 +239,8 @@ public class MainActivity extends Activity {
         super.onDestroy();
         try { unregisterReceiver(packages); } catch (Exception ignored) { }
         if (updates != null) updates.stop();
+        if (bluetooth != null) bluetooth.stop();
+        try { unregisterReceiver(screen); } catch (Exception ignored) { }
         if (netCallback != null) {
             try { getSystemService(ConnectivityManager.class).unregisterNetworkCallback(netCallback); }
             catch (Exception ignored) { }
@@ -218,7 +251,9 @@ public class MainActivity extends Activity {
     @Override
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
+        homePressed = true; // a chooser closing now doesn't bring the Features menu back
         dismissPopup();
+        homePressed = false;
         if (!listMode && sheet.getVisibility() == View.VISIBLE) closeSheet(false);
         focusDock(0);
     }
@@ -245,6 +280,14 @@ public class MainActivity extends Activity {
     };
     private final BroadcastReceiver packages = new BroadcastReceiver() {
         @Override public void onReceive(Context c, Intent i) { buildApps(); }
+    };
+    /** TV on: open the power-on app. TV off: a sleep timer has nothing left to do. */
+    private final BroadcastReceiver screen = new BroadcastReceiver() {
+        @Override public void onReceive(Context c, Intent i) {
+            handler.removeCallbacks(powerOnTask);
+            if (Intent.ACTION_SCREEN_ON.equals(i.getAction())) handler.postDelayed(powerOnTask, 1500);
+            else SleepTimer.set(c, 0);
+        }
     };
 
     // ---------------------------------------------------------------- layout
@@ -351,6 +394,27 @@ public class MainActivity extends Activity {
     private View buildTopBar() {
         LinearLayout bar = new LinearLayout(this);
         bar.setGravity(Gravity.CENTER_VERTICAL);
+
+        // A connected Bluetooth device and its name; shown only while one is connected.
+        LinearLayout bt = new LinearLayout(this);
+        bt.setGravity(Gravity.CENTER_VERTICAL);
+        bt.setPadding(dp(12), 0, dp(16), 0);
+        ImageView btIcon = new ImageView(this);
+        btIcon.setImageResource(R.drawable.ic_bluetooth);
+        bt.addView(btIcon, new LinearLayout.LayoutParams(dp(18), dp(18)));
+        btName = text(14, sansMedium(), Color.WHITE);
+        btName.setSingleLine(true);
+        btName.setEllipsize(TextUtils.TruncateAt.END);
+        btName.setMaxWidth(dp(160));
+        bt.addView(btName, llp(-2, -2, dp(8), 0, 0, 0));
+        GradientDrawable btBg = new GradientDrawable();
+        bt.setBackground(btBg);
+        Object[] btPart = {bt, btBg, btIcon, btName, dp(18)};
+        topParts.add(btPart);
+        paintTop(btPart, false);
+        bt.setVisibility(View.GONE);
+        btChip = bt;
+        bar.addView(bt, llp(-2, dp(BAR_H), 0, 0, dp(10), 0));
 
         LinearLayout chip = new LinearLayout(this);
         chip.setGravity(Gravity.CENTER_VERTICAL);
@@ -474,16 +538,20 @@ public class MainActivity extends Activity {
         if (changed != null) packageSeq = changed.getSequenceNumber();
         Intent q = new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LEANBACK_LAUNCHER);
         Map<String, App> byPkg = new HashMap<>();
+        allApps = new ArrayList<>();
         for (ResolveInfo ri : pm.queryIntentActivities(q, 0)) {
             ActivityInfo ai = ri.activityInfo;
-            if (hidden.contains(ai.packageName) || byPkg.containsKey(ai.packageName)) continue;
+            if (hidden.contains(ai.packageName) || userHidden.contains(ai.packageName)
+                    || byPkg.containsKey(ai.packageName)) continue;
             App a = new App();
             a.pkg = ai.packageName;
             a.label = String.valueOf(ri.loadLabel(pm));
             a.component = new ComponentName(ai.packageName, ai.name);
             a.ri = ri;
             byPkg.put(a.pkg, a);
+            allApps.add(a);
         }
+        Collections.sort(allApps, (x, y) -> x.label.compareToIgnoreCase(y.label));
         List<App> inDock = new ArrayList<>();
         for (String p : dockApps) if (byPkg.containsKey(p)) inDock.add(byPkg.remove(p));
         List<App> rest = new ArrayList<>();
@@ -528,6 +596,11 @@ public class MainActivity extends Activity {
             sheetApps = all;
         } else {
             sheetApps = rest;
+        }
+        if (recentFirst) {
+            // Most recently opened first; apps never opened from Luno keep their order after them.
+            android.content.SharedPreferences used = getSharedPreferences("recent", MODE_PRIVATE);
+            Collections.sort(sheetApps, (x, y) -> Long.compare(used.getLong(y.pkg, 0), used.getLong(x.pkg, 0)));
         }
         releaseSheet();
         if (sheet.getVisibility() == View.VISIBLE) buildSheet(sheetApps);
@@ -682,6 +755,7 @@ public class MainActivity extends Activity {
         }
         TextView label = name;
         card.setOnClickListener(v -> {
+            opened(app.pkg);
             launch(new Intent(Intent.ACTION_MAIN)
                     .addCategory(Intent.CATEGORY_LEANBACK_LAUNCHER)
                     .setComponent(app.component)
@@ -710,14 +784,15 @@ public class MainActivity extends Activity {
         // Hold OK: dock apps can be moved or removed, other apps added to the dock.
         card.setOnLongClickListener(v -> {
             if (movingPkg != null) return true;
-            if (inDock) {
-                showActions(v, new String[]{"Move", "Remove from dock"},
-                        new Runnable[]{() -> startMove(app.pkg), () -> removeFromDock(app.pkg)});
-            } else {
-                if (listMode) showActions(v, new String[]{"Move"}, new Runnable[]{() -> startMove(app.pkg)});
-                else showActions(v, new String[]{"Move", "Add to dock"},
-                        new Runnable[]{() -> startMove(app.pkg), () -> addToDock(app.pkg)});
-            }
+            List<String> labels = new ArrayList<>();
+            List<Runnable> acts = new ArrayList<>();
+            // Apps in the list can't be moved while it's ordered by recent use.
+            if (inDock || !recentFirst) { labels.add("Move"); acts.add(() -> startMove(app.pkg)); }
+            if (inDock) { labels.add("Remove from dock"); acts.add(() -> removeFromDock(app.pkg)); }
+            else if (!listMode) { labels.add("Add to dock"); acts.add(() -> addToDock(app.pkg)); }
+            labels.add("Hide");
+            acts.add(() -> hideApp(app.pkg, inDock));
+            showActions(v, labels.toArray(new String[0]), acts.toArray(new Runnable[0]));
             return true;
         });
         if (inDock) {
@@ -1237,73 +1312,119 @@ public class MainActivity extends Activity {
 
     // ---------------------------------------------------------------- features
 
-    private void showFeatures() {
+    private void showFeatures() { showFeatures(0); }
+
+    /** The Features menu (top bar, or the remote's Menu key); focus starts on the given row. */
+    private void showFeatures(int focusRow) {
         String[] pkgs = getResources().getStringArray(R.array.feature_packages);
         String[] labels = getResources().getStringArray(R.array.feature_labels);
-        LinearLayout list = new LinearLayout(this);
-        list.setOrientation(LinearLayout.VERTICAL);
-        list.setPadding(dp(8), dp(8), dp(8), dp(8));
-        GradientDrawable panel = new GradientDrawable();
-        panel.setCornerRadius(dp(20));
-        panel.setColor(0xF21C1D21);
-        panel.setStroke(dp(1), 0x26FFFFFF);
-        list.setBackground(panel);
-        int width = dp(280);
+        LinearLayout list = panel();
+        int width = dp(330);
         PopupWindow pw = new PopupWindow(list, width, ViewGroup.LayoutParams.WRAP_CONTENT, true);
-
         List<TextView> rows = new ArrayList<>();
-        TextView homeRow = text(14, sans(), Color.WHITE);
-        homeRow.setSingleLine(true);
-        homeRow.setGravity(Gravity.CENTER_VERTICAL);
-        homeRow.setPadding(dp(16), 0, dp(16), 0);
-        homeRow.setFocusable(true);
-        homeRow.setClickable(true);
-        homeRow.setId(View.generateViewId());
-        homeRow.setText("Home  \u00b7  " + (listMode ? "Apps list" : "Photo"));
-        GradientDrawable homeBg = new GradientDrawable();
-        homeBg.setCornerRadius(dp(13));
-        homeBg.setColor(Color.TRANSPARENT);
-        homeRow.setBackground(homeBg);
-        homeRow.setOnFocusChangeListener((v, has) -> {
-            homeBg.setColor(has ? 0xF7FFFFFF : Color.TRANSPARENT);
-            homeRow.setTextColor(has ? 0xFF111114 : Color.WHITE);
-        });
-        homeRow.setOnClickListener(v -> {
+        android.content.SharedPreferences prefs = getPreferences(MODE_PRIVATE);
+
+        section(list, "Home screen", true);
+        menuRow(list, rows, "Home  ·  " + (listMode ? "Apps list" : "Photo"), r -> {
             dismissPopup();
             listMode = !listMode;
-            getPreferences(MODE_PRIVATE).edit().putBoolean("list", listMode).apply();
+            prefs.edit().putBoolean("list", listMode).apply();
             applyMode();
         });
-        list.addView(homeRow, new LinearLayout.LayoutParams(-1, dp(44)));
-        rows.add(homeRow);
+        menuRow(list, rows, orderText(), r -> {
+            recentFirst = !recentFirst;
+            prefs.edit().putBoolean("recent_first", recentFirst).apply();
+            r.setText(orderText());
+            buildApps();
+        });
+        menuRow(list, rows, "Hidden apps  ·  " + (userHidden.isEmpty() ? "None" : String.valueOf(userHidden.size())),
+                r -> chooseHidden());
+
+        section(list, "TV", false);
+        menuRow(list, rows, "On power-on  ·  " + powerOnLabel(), r -> choosePowerOnApp());
+        int left = SleepTimer.minutesLeft(this);
+        menuRow(list, rows, "Sleep timer  ·  " + (left == 0 ? "Off" : left + " min left"), r -> chooseSleep());
+        TextView mem = menuRow(list, rows, memoryText(null), this::freeMemory);
+        mem.getLayoutParams().height = dp(48);
+        mem.setPadding(dp(16), 0, dp(16), dp(9)); // the text sits over the bar
+        memBar = new MemoryBar(dp(16), dp(10), dp(4));
+        memBar.set(memoryUsed());
+        mem.setForeground(memBar);
+
+        boolean first = true;
         for (int i = 0; i < pkgs.length && i < labels.length; i++) {
             String pkg = pkgs[i], label = labels[i];
             if (!present(pkg)) continue;
-            TextView r = text(14, sans(), Color.WHITE);
-            r.setSingleLine(true);
-            r.setGravity(Gravity.CENTER_VERTICAL);
-            r.setPadding(dp(16), 0, dp(16), 0);
-            r.setFocusable(true);
-            r.setClickable(true);
-            r.setId(View.generateViewId());
-            r.setText(featureText(label, enabled(pkg)));
-            GradientDrawable bg = new GradientDrawable();
-            bg.setCornerRadius(dp(13));
-            bg.setColor(Color.TRANSPARENT);
-            r.setBackground(bg);
-            r.setOnFocusChangeListener((v, has) -> {
-                bg.setColor(has ? 0xF7FFFFFF : Color.TRANSPARENT);
-                r.setTextColor(has ? 0xFF111114 : Color.WHITE);
-            });
-            r.setOnClickListener(v -> toggleFeature(r, pkg, label));
-            list.addView(r, new LinearLayout.LayoutParams(-1, dp(44)));
-            rows.add(r);
+            if (first) section(list, "Background apps  ·  off frees memory", false);
+            first = false;
+            menuRow(list, rows, featureText(label, enabled(pkg)), r -> toggleFeature(r, pkg, label));
         }
-        if (rows.isEmpty()) return;
-        TextView note = text(11, sans(), 0x99FFFFFF);
-        note.setText("Off frees memory. Applies at once.");
-        note.setPadding(dp(16), dp(8), dp(16), dp(4));
-        list.addView(note);
+        linkRows(rows);
+        showMenu(pw, width);
+        rows.get(Math.max(0, Math.min(focusRow, rows.size() - 1))).requestFocus();
+    }
+
+    /** Rows of the Features menu, in order (to come back to the same row after a chooser). */
+    private static final int ROW_HIDDEN = 2, ROW_POWER_ON = 3, ROW_SLEEP = 4;
+    private boolean homePressed;
+
+    /** A small grey heading over a group of menu rows, with a thin line above all but the first. */
+    private void section(LinearLayout list, String title, boolean first) {
+        if (!first) {
+            View line = new View(this);
+            line.setBackgroundColor(0x1FFFFFFF);
+            list.addView(line, llp(-1, dp(1), dp(12), dp(6), dp(12), 0));
+        }
+        TextView t = text(11, sansMedium(), 0x8CFFFFFF);
+        t.setText(title);
+        t.setPadding(dp(16), dp(first ? 2 : 8), dp(16), dp(2));
+        list.addView(t);
+    }
+
+    private String orderText() {
+        return "Apps order  ·  " + (recentFirst ? "Recently used first" : "Your order");
+    }
+
+    /** The dark rounded panel menus are drawn on. */
+    private LinearLayout panel() {
+        LinearLayout list = new LinearLayout(this);
+        list.setOrientation(LinearLayout.VERTICAL);
+        list.setPadding(dp(8), dp(8), dp(8), dp(8));
+        GradientDrawable bg = new GradientDrawable();
+        bg.setCornerRadius(dp(20));
+        bg.setColor(0xF21C1D21);
+        bg.setStroke(dp(1), 0x26FFFFFF);
+        list.setBackground(bg);
+        return list;
+    }
+
+    /** A menu row: white text, a white pill with dark text when focused. */
+    private TextView menuRow(LinearLayout list, List<TextView> rows, String label,
+                             java.util.function.Consumer<TextView> click) {
+        TextView r = text(14, sans(), Color.WHITE);
+        r.setSingleLine(true);
+        r.setEllipsize(TextUtils.TruncateAt.END);
+        r.setGravity(Gravity.CENTER_VERTICAL);
+        r.setPadding(dp(16), 0, dp(16), 0);
+        r.setFocusable(true);
+        r.setClickable(true);
+        r.setId(View.generateViewId());
+        r.setText(label);
+        GradientDrawable bg = new GradientDrawable();
+        bg.setCornerRadius(dp(13));
+        bg.setColor(Color.TRANSPARENT);
+        r.setBackground(bg);
+        r.setOnFocusChangeListener((v, has) -> {
+            bg.setColor(has ? 0xF7FFFFFF : Color.TRANSPARENT);
+            r.setTextColor(has ? 0xFF111114 : Color.WHITE);
+        });
+        r.setOnClickListener(v -> click.accept(r));
+        list.addView(r, new LinearLayout.LayoutParams(-1, dp(36)));
+        rows.add(r);
+        return r;
+    }
+
+    private static void linkRows(List<TextView> rows) {
         for (int i = 0; i < rows.size(); i++) {
             TextView r = rows.get(i);
             r.setNextFocusUpId(rows.get(Math.max(0, i - 1)).getId());
@@ -1311,13 +1432,265 @@ public class MainActivity extends Activity {
             r.setNextFocusLeftId(r.getId());
             r.setNextFocusRightId(r.getId());
         }
+    }
+
+    /** Shows a menu under the Features button, right-aligned with it. */
+    private void showMenu(PopupWindow pw, int width) {
         pw.setOutsideTouchable(true);
         pw.setElevation(dp(16));
         View anchor = featuresBtn;
         pw.setOnDismissListener(() -> { popup = null; anchor.requestFocus(); });
         popup = pw;
         pw.showAsDropDown(anchor, anchor.getWidth() - width, dp(12));
-        rows.get(0).requestFocus();
+    }
+
+    /**
+     * A list to pick one value from, in place of the Features menu (which comes back after, on the
+     * same row). Scrolls when it's long; the current value is ticked.
+     */
+    private void showChooser(String title, List<String> labels, int selected, int backToRow,
+                             java.util.function.IntConsumer pick) {
+        dismissPopup();
+        LinearLayout box = panel();
+        TextView head = text(12, sansMedium(), 0x99FFFFFF);
+        head.setText(title);
+        head.setPadding(dp(16), dp(6), dp(16), dp(8));
+        box.addView(head);
+        ScrollView scroll = new ScrollView(this);
+        scroll.setVerticalScrollBarEnabled(false);
+        LinearLayout list = new LinearLayout(this);
+        list.setOrientation(LinearLayout.VERTICAL);
+        scroll.addView(list);
+        int visible = Math.min(labels.size(), 8);
+        box.addView(scroll, new LinearLayout.LayoutParams(-1, dp(36) * visible));
+        int width = dp(330);
+        PopupWindow pw = new PopupWindow(box, width, ViewGroup.LayoutParams.WRAP_CONTENT, true);
+        List<TextView> rows = new ArrayList<>();
+        for (int i = 0; i < labels.size(); i++) {
+            int index = i;
+            menuRow(list, rows, labels.get(i) + (i == selected ? "  ✓" : ""), r -> {
+                pw.setOnDismissListener(() -> popup = null);
+                pw.dismiss();
+                pick.accept(index);
+                showFeatures(backToRow);
+            });
+        }
+        linkRows(rows);
+        showMenu(pw, width);
+        pw.setOnDismissListener(() -> { // Back: to the menu (Home: closed)
+            popup = null;
+            if (!homePressed) showFeatures(backToRow);
+        });
+        rows.get(Math.max(0, selected)).requestFocus();
+    }
+
+    // ---------------------------------------------------------------- power-on app
+
+    /** "" stays on Home, "last" is the app last opened from Luno, else a package. */
+    private String powerOnLabel() {
+        String p = getPreferences(MODE_PRIVATE).getString("power_on", "");
+        if (p.isEmpty()) return "Stay on Home";
+        if (p.equals("last")) return "Last used app";
+        for (App a : allApps) if (a.pkg.equals(p)) return a.label;
+        return "Stay on Home"; // uninstalled or hidden since
+    }
+
+    private void choosePowerOnApp() {
+        String p = getPreferences(MODE_PRIVATE).getString("power_on", "");
+        List<String> labels = new ArrayList<>(Arrays.asList("Stay on Home", "Last used app"));
+        int selected = p.isEmpty() ? 0 : p.equals("last") ? 1 : 0;
+        for (int i = 0; i < allApps.size(); i++) {
+            labels.add(allApps.get(i).label);
+            if (allApps.get(i).pkg.equals(p)) selected = i + 2;
+        }
+        showChooser("Open when the TV turns on", labels, selected, ROW_POWER_ON, i -> {
+            String v = i == 0 ? "" : i == 1 ? "last" : allApps.get(i - 2).pkg;
+            getPreferences(MODE_PRIVATE).edit().putString("power_on", v).apply();
+        });
+    }
+
+    /** The TV turned on (or just booted): open the chosen app, if any. */
+    private void openPowerOnApp() {
+        android.content.SharedPreferences prefs = getPreferences(MODE_PRIVATE);
+        String p = prefs.getString("power_on", "");
+        if (p.equals("last")) p = prefs.getString("last_app", "");
+        if (p.isEmpty() || userHidden.contains(p)) return;
+        PackageManager pm = getPackageManager();
+        Intent i = pm.getLeanbackLaunchIntentForPackage(p);
+        if (i == null) i = pm.getLaunchIntentForPackage(p);
+        if (i != null) launch(i);
+    }
+
+    /** An app opened from Luno: remembered for "Last used app" and the recent-first order. */
+    private void opened(String pkg) {
+        getPreferences(MODE_PRIVATE).edit().putString("last_app", pkg).apply();
+        getSharedPreferences("recent", MODE_PRIVATE).edit().putLong(pkg, System.currentTimeMillis()).apply();
+        if (recentFirst) reorder = true;
+    }
+
+    // ---------------------------------------------------------------- sleep timer
+
+    private static final int[] SLEEP_MINUTES = {0, 15, 30, 60, 90, 120};
+
+    private void chooseSleep() {
+        List<String> labels = new ArrayList<>();
+        for (int m : SLEEP_MINUTES) labels.add(m == 0 ? "Off" : m < 60 ? m + " minutes" : m % 60 == 0
+                ? (m / 60) + (m == 60 ? " hour" : " hours") : (m / 60) + " h " + (m % 60) + " min");
+        int left = SleepTimer.minutesLeft(this);
+        showChooser(left == 0 ? "Turn the TV off after" : "Turn the TV off after (" + left + " min left now)",
+                labels, left == 0 ? 0 : -1, ROW_SLEEP, i -> {
+                    SleepTimer.set(this, SLEEP_MINUTES[i]);
+                    if (SLEEP_MINUTES[i] > 0) {
+                        Toast.makeText(this, "The TV turns off in " + labels.get(i), Toast.LENGTH_SHORT).show();
+                    }
+                });
+    }
+
+    // ---------------------------------------------------------------- hidden apps
+
+    private void hideApp(String pkg, boolean fromDock) {
+        int at = fromDock ? shownIndex(pkg) : sheetIndex(pkg);
+        userHidden.add(pkg);
+        saveHidden();
+        buildApps();
+        if (fromDock) focusDock(Math.max(0, at - 1));
+        else if (!sheetTiles.isEmpty()) sheetTiles.get(Math.max(0, Math.min(at, sheetTiles.size() - 1))).requestFocus();
+        Toast.makeText(this, "Hidden. Features > Hidden apps brings it back.", Toast.LENGTH_SHORT).show();
+    }
+
+    private void saveHidden() {
+        getPreferences(MODE_PRIVATE).edit().putString("hidden_user", TextUtils.join(",", userHidden)).apply();
+    }
+
+    private void chooseHidden() {
+        if (userHidden.isEmpty()) {
+            Toast.makeText(this, "Hold OK on an app and choose Hide", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        PackageManager pm = getPackageManager();
+        List<String> pkgs = new ArrayList<>(userHidden), labels = new ArrayList<>();
+        for (String p : pkgs) {
+            String l = p;
+            try { l = String.valueOf(pm.getApplicationLabel(pm.getApplicationInfo(p, 0))); } catch (Exception ignored) { }
+            labels.add("Show " + l);
+        }
+        showChooser("Hidden apps", labels, -1, ROW_HIDDEN, i -> {
+            userHidden.remove(pkgs.get(i));
+            saveHidden();
+            buildApps();
+        });
+    }
+
+    // ---------------------------------------------------------------- memory
+
+    /** "Memory · 1.3 of 2.0 GB used", plus what the last clean freed. */
+    private String memoryText(String extra) {
+        android.app.ActivityManager.MemoryInfo mi = new android.app.ActivityManager.MemoryInfo();
+        getSystemService(android.app.ActivityManager.class).getMemoryInfo(mi);
+        double gb = 1024.0 * 1024 * 1024;
+        // With a result after it, "used" is dropped so the row fits.
+        String s = String.format(Locale.US, "Memory  ·  %.1f of %.1f GB" + (extra == null ? " used" : ""),
+                (mi.totalMem - mi.availMem) / gb, mi.totalMem / gb);
+        return extra == null ? s : s + "  ·  " + extra;
+    }
+
+    private MemoryBar memBar;
+
+    /** Share of the TV's memory in use, 0..1. */
+    private float memoryUsed() {
+        android.app.ActivityManager.MemoryInfo mi = new android.app.ActivityManager.MemoryInfo();
+        getSystemService(android.app.ActivityManager.class).getMemoryInfo(mi);
+        return mi.totalMem <= 0 ? 0 : (float) (mi.totalMem - mi.availMem) / mi.totalMem;
+    }
+
+    /**
+     * The memory row's bar: memory in use, along the row's bottom. White on the dark menu, dark on the
+     * focused row's white pill; amber once memory is nearly full.
+     */
+    static final class MemoryBar extends Drawable {
+        private final android.graphics.Paint track = new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG),
+                fill = new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
+        private final android.graphics.RectF r = new android.graphics.RectF();
+        private final int inset, bottom, thick;
+        private float used;
+        private boolean focused;
+
+        MemoryBar(int inset, int bottom, int thick) {
+            this.inset = inset;
+            this.bottom = bottom;
+            this.thick = thick;
+        }
+
+        void set(float used) {
+            this.used = Math.max(0f, Math.min(1f, used));
+            invalidateSelf();
+        }
+
+        @Override public void draw(android.graphics.Canvas c) {
+            android.graphics.Rect b = getBounds();
+            boolean high = used > 0.85f;
+            track.setColor(focused ? 0x26000000 : 0x2EFFFFFF);
+            fill.setColor(high ? 0xFFFFB74D : focused ? 0xFF111114 : 0xFFFFFFFF);
+            float y = b.bottom - bottom - thick;
+            r.set(b.left + inset, y, b.right - inset, y + thick);
+            c.drawRoundRect(r, thick / 2f, thick / 2f, track);
+            r.right = r.left + (b.width() - 2 * inset) * used;
+            c.drawRoundRect(r, thick / 2f, thick / 2f, fill);
+        }
+
+        @Override public boolean isStateful() { return true; }
+
+        @Override protected boolean onStateChange(int[] state) {
+            boolean f = false;
+            for (int s : state) if (s == android.R.attr.state_focused) f = true;
+            if (f == focused) return false;
+            focused = f;
+            invalidateSelf();
+            return true;
+        }
+
+        @Override public void setAlpha(int a) { }
+        @Override public void setColorFilter(android.graphics.ColorFilter cf) { }
+        @Override public int getOpacity() { return android.graphics.PixelFormat.TRANSLUCENT; }
+    }
+
+    private long availMem() {
+        android.app.ActivityManager.MemoryInfo mi = new android.app.ActivityManager.MemoryInfo();
+        getSystemService(android.app.ActivityManager.class).getMemoryInfo(mi);
+        return mi.availMem;
+    }
+
+    /** Closes the apps running in the background (through the TV's adb), then shows what that freed. */
+    private void freeMemory(TextView row) {
+        if (row.getTag() == Boolean.TRUE) return;
+        row.setTag(Boolean.TRUE);
+        row.setText("Memory  ·  Freeing…");
+        long before = availMem();
+        new Thread(() -> {
+            String err = null;
+            try {
+                LocalAdb.shell(this, "am kill-all");
+                Thread.sleep(800); // let the system count the freed memory
+            } catch (Exception e) {
+                err = "Allow debugging on the TV, then try again";
+            }
+            String message = err;
+            runOnUiThread(() -> {
+                row.setTag(null);
+                long freed = (availMem() - before) / (1024 * 1024);
+                if (memBar != null) memBar.set(memoryUsed());
+                row.setText(message != null ? "Memory  ·  " + message
+                        : memoryText(freed > 0 ? "freed " + freed + " MB" : "nothing to free"));
+            });
+        }, "free-memory").start();
+    }
+
+    // ---------------------------------------------------------------- bluetooth
+
+    private void updateBt() {
+        String label = bluetooth == null ? null : bluetooth.label();
+        btChip.setVisibility(label == null ? View.GONE : View.VISIBLE);
+        if (label != null) btName.setText(label);
     }
 
     // ---------------------------------------------------------------- arranging the dock

@@ -5,6 +5,8 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!-- The TV's own adb on 127.0.0.1:5555: Features switches, Wi-Fi name, background limit. -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- A connected Bluetooth device's name in the top bar. -->
+    <uses-permission android:name="android.permission.BLUETOOTH" />
 
     <uses-feature android:name="android.software.leanback" android:required="false" />
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
@@ -43,5 +45,8 @@
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </activity>
+
+        <!-- Features > Sleep timer: turns the TV off when the alarm goes. -->
+        <receiver android:name=".SleepTimer" android:exported="false" />
     </application>
 </manifest>

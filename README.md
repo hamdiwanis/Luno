@@ -21,13 +21,18 @@ about 16 MB of its own memory on Home and 12 MB while another app is in front.
   in its colours. The apps list uses about half the memory (about 13 MB).
 - **Updates shown on the apps**: an app being installed or updated (Play Store or any other) is
   darkened, with "Updating" and its progress, until it's done.
-- **Features menu** (top bar, or the remote's Menu key): switch apps such as Chromecast, screen
-  mirroring or TV Guard on and off.
-- **Network name** shown without turning Location on.
+- **Hide apps**: hold OK on an app and choose Hide; Features > Hidden apps brings it back.
+- **Features menu** (top bar, or the remote's Menu key), in three parts:
+  - *Home screen*: the home style, the apps order (yours, or recently used first) and hidden apps.
+  - *TV*: an app to open when the TV turns on (or the last one used), a sleep timer (15 minutes to
+    2 hours) and memory: how much is in use, with a bar; choose it to close background apps.
+  - *Background apps*: switch apps such as Chromecast, screen mirroring or TV Guard on and off.
+- **Network name** shown without turning Location on, and a **Bluetooth** device's name while one
+  is connected.
 - **Background limit**: keeps Android's cached-app limit (1 by default) set, as Google's flag sync
   wipes it.
 
-The Features menu, network name and background limit use the TV's own adb (network debugging on
+The Features menu, network name, sleep timer and background limit use the TV's own adb (network debugging on
 `127.0.0.1:5555`). The first time, the TV asks "Allow USB debugging?" for Luno's key: tick
 **Always allow** and press **Allow**.
 
