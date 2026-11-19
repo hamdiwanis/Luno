@@ -1,5 +1,7 @@
 # Luno
 
+[![Luno: a home screen your TV can actually afford](docs/img/share.jpg)](https://hamdiwanis.github.io/Luno/)
+
 A light, photo-first home screen for Android TV / Google TV: a full-screen photo that changes
 every 10 minutes, a compact top bar (time, date, network, Features, Settings) and a floating dock
 of your favourite apps; press Down for every other app.
