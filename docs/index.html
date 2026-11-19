@@ -697,163 +697,130 @@ TV=192.168.1.20:5555 ./debloat.sh             <span class="c"># do it (--restore
 })();
 </script>
 <script>
-// Behind the header and hero: little TVs showing Luno's own photos, app banners and a few dots, at
-// three depths. Each particle is drawn once into a small sprite (bezel, glass glare, glow, depth
-// blur), so a frame only moves images about. They drift up, sway, turn a little, now and then
-// change channel through a burst of static, brighten near the cursor and shift with it for depth.
-// Nothing runs when the hero is off screen, the tab is hidden, or the system asks for less motion.
+// Behind the header and hero, one of two backgrounds (try them with ?bg=sky, ?bg=signal or ?bg=both):
+//  sky    — stars at three depths that twinkle and shift a little with the mouse, a crescent moon like
+//           the logo's with a soft glow, and now and then a shooting star;
+//  signal — faint scan lines and three wavy broadcast lines with a bright pulse running along them.
+// It's still (one frame) when the system asks for less motion, and stops when the hero is off screen.
 (() => {
   const canvas = document.getElementById('particles'), host = canvas.parentElement, ctx = canvas.getContext('2d');
-  const PHOTOS = ['img/01.jpg', 'img/02.jpg', 'img/04.jpg', 'img/07.jpg', 'img/09.jpg', 'img/11.jpg'];
-  const APPS = [['#b3261e', '#fff'], ['#1b1d22', '#fff'], ['#f4f4f2', '#c4161c'], ['#1d1a3a', '#a99cff'], ['#0f6e56', '#fff'],
-                ['#fac775', '#412402'], ['#26215c', '#cecbf6'], ['#0c447c', '#e6f1fb'], ['#4b1528', '#f4c0d1']];
+  const mode = (new URLSearchParams(location.search).get('bg') || 'sky').toLowerCase();
+  const SKY = mode === 'sky' || mode === 'both', SIGNAL = mode === 'signal' || mode === 'both';
   const reduce = matchMedia('(prefers-reduced-motion: reduce)'), scheme = matchMedia('(prefers-color-scheme: light)');
-  let W = 0, H = 0, dpr = 1, parts = [], light = scheme.matches, running = false, last = 0, thumbs = [], noise = [];
-  const mouse = {x: 0, y: 0, tx: 0, ty: 0, px: -1e4, py: -1e4};
-  const rnd = (a, b) => a + Math.random() * (b - a), pick = a => a[Math.floor(Math.random() * a.length)];
-  const off = (w, h) => { const c = document.createElement('canvas'); c.width = Math.ceil(w); c.height = Math.ceil(h); return c; };
+  let W = 0, H = 0, dpr = 1, light = scheme.matches, running = false, last = 0, stars = [], shoot = null, nextShoot = 0, moon = null;
+  const mouse = {x: 0, y: 0, tx: 0, ty: 0};
+  const rnd = (a, b) => a + Math.random() * (b - a);
 
-  // small copies of the photos (cover-cropped to 16:9) and a few frames of static
-  PHOTOS.forEach((src, i) => {
-    const img = new Image();
-    img.onload = () => {
-      const c = off(192, 108), g = c.getContext('2d'), s = Math.max(192 / img.width, 108 / img.height);
-      g.drawImage(img, (192 - img.width * s) / 2, (108 - img.height * s) / 2, img.width * s, img.height * s);
-      thumbs[i] = c;
-    };
-    img.src = src;
-  });
-  for (let k = 0; k < 3; k++) {
-    const c = off(96, 54), g = c.getContext('2d'), d = g.createImageData(96, 54);
-    for (let i = 0; i < d.data.length; i += 4) { const v = Math.random() * 255; d.data[i] = d.data[i + 1] = d.data[i + 2] = v; d.data[i + 3] = 255; }
-    g.putImageData(d, 0, 0); noise.push(c);
-  }
-
-  // one particle's look, drawn once
-  function sprite(p) {
-    const pad = p.kind === 'dot' ? 8 : Math.round(p.w * 0.45), w = p.w, h = p.kind === 'dot' ? w : w * 9 / 16;
-    const c = off((w + pad * 2) * dpr, (h + pad * 2 + (p.stand ? w * 0.12 : 0)) * dpr), g = c.getContext('2d');
-    g.scale(dpr, dpr); g.translate(pad, pad);
-    if (p.z < 0.5) g.filter = 'blur(2.4px)'; else if (p.z < 0.8) g.filter = 'blur(0.8px)';
-    if (p.kind === 'dot') {
-      const r = w / 2, grd = g.createRadialGradient(r, r, 0, r, r, r);
-      grd.addColorStop(0, light ? 'rgba(120,128,150,.9)' : 'rgba(220,228,255,.95)'); grd.addColorStop(1, 'rgba(220,228,255,0)');
-      g.fillStyle = grd; g.beginPath(); g.arc(r, r, r, 0, 6.283); g.fill();
-      return {c, pad};
-    }
-    const r = Math.max(4, w * 0.1), bez = Math.max(2, w * 0.045);
-    // glow in the screen's colour (nearer screens glow more)
-    if (p.z > 0.5) { g.shadowColor = p.glow; g.shadowBlur = w * (light ? 0.22 : 0.35) * p.z; }
-    g.fillStyle = p.kind === 'tv' ? '#16171b' : p.app[0];
-    g.beginPath(); g.roundRect(0, 0, w, h, r); g.fill();
-    g.shadowBlur = 0;
-    if (p.kind === 'tv') {
-      // the picture, inside the bezel
-      g.save(); g.beginPath(); g.roundRect(bez, bez, w - bez * 2, h - bez * 2, Math.max(2, r - bez)); g.clip();
-      if (p.static) g.drawImage(pick(noise), bez, bez, w - bez * 2, h - bez * 2);
-      else if (thumbs[p.photo]) g.drawImage(thumbs[p.photo], bez, bez, w - bez * 2, h - bez * 2);
-      else { g.fillStyle = '#26315c'; g.fillRect(0, 0, w, h); }
-      // a tiny dock along the bottom
-      if (!p.static && w > 60) {
-        const n = 4, cw = w * 0.11, gap = w * 0.025, tot = n * cw + (n - 1) * gap, y = h - bez - h * 0.2;
-        for (let i = 0; i < n; i++) { g.fillStyle = APPS[(p.photo + i * 2) % APPS.length][0]; g.beginPath(); g.roundRect((w - tot) / 2 + i * (cw + gap), y, cw, cw * 0.56, 1.5); g.fill(); }
-      }
-      // glass glare
-      const gl = g.createLinearGradient(0, 0, w, h);
-      gl.addColorStop(0, 'rgba(255,255,255,.16)'); gl.addColorStop(0.45, 'rgba(255,255,255,0)');
-      g.fillStyle = gl; g.fillRect(0, 0, w, h);
-      g.restore();
-      if (p.live) { g.fillStyle = '#ff5a52'; g.beginPath(); g.arc(bez + w * 0.07, bez + h * 0.12, Math.max(1.6, h * 0.045), 0, 6.283); g.fill(); }
-      if (p.stand) { g.fillStyle = '#16171b'; g.beginPath(); g.roundRect(w * 0.38, h, w * 0.24, w * 0.05, [0, 0, 3, 3]); g.fill(); }
-    } else {
-      // an app banner: icon and wordmark bars in its ink colour
-      const ink = p.app[1];
-      g.fillStyle = ink; g.globalAlpha = 0.9;
-      g.beginPath(); g.moveTo(w * 0.26, h * 0.38); g.lineTo(w * 0.36, h * 0.5); g.lineTo(w * 0.26, h * 0.62); g.fill();
-      g.beginPath(); g.roundRect(w * 0.41, h * 0.43, w * 0.34, h * 0.14, 2); g.fill();
-      g.globalAlpha = 1;
-      const gl = g.createLinearGradient(0, 0, 0, h);
-      gl.addColorStop(0, 'rgba(255,255,255,.18)'); gl.addColorStop(0.5, 'rgba(255,255,255,0)');
-      g.fillStyle = gl; g.beginPath(); g.roundRect(0, 0, w, h, r); g.fill();
-    }
-    return {c, pad};
-  }
-  function make(anywhere) {
-    const z = pick([0.35, 0.35, 0.35, 0.6, 0.6, 1]);
-    const kind = Math.random() < 0.2 ? 'dot' : Math.random() < 0.55 ? 'tv' : 'banner';
-    const app = pick(APPS), photo = Math.floor(Math.random() * PHOTOS.length);
-    const p = {
-      z, kind, app, photo, live: Math.random() < 0.25, stand: kind === 'tv' && Math.random() < 0.4,
-      glow: kind === 'tv' ? pick(['#5b7bd6', '#5dcaa5', '#ef9f27', '#7f77dd', '#d4537e']) : app[0],
-      x: rnd(0, W), y: anywhere ? rnd(-40, H) : H + rnd(40, 120),
-      w: kind === 'dot' ? rnd(3, 7) * z + 3 : rnd(56, 104) * z + 20,
-      vy: -rnd(7, 15) * (0.45 + z), vx: rnd(-2.5, 2.5), phase: rnd(0, 6.28), spin: rnd(0.15, 0.4),
-      nextFlick: performance.now() + rnd(4000, 16000), staticUntil: 0,
-    };
-    p.sp = sprite(p);
-    return p;
+  // the crescent, drawn once: a disc with an offset disc cut out of it
+  function makeMoon() {
+    const r = Math.max(18, Math.min(30, W * 0.018)), c = document.createElement('canvas');
+    c.width = c.height = Math.ceil(r * 2 * dpr + 4);
+    const g = c.getContext('2d'); g.scale(dpr, dpr);
+    g.fillStyle = light ? '#d9d4c3' : '#f4f1e6';
+    g.beginPath(); g.arc(r + 1, r + 1, r, 0, 6.283); g.fill();
+    g.globalCompositeOperation = 'destination-out';
+    g.beginPath(); g.arc(r + 1 + r * 0.55, r + 1 - r * 0.38, r * 0.86, 0, 6.283); g.fill();
+    return {c, r};
   }
   function size() {
     dpr = Math.min(2, devicePixelRatio || 1);
     W = host.clientWidth; H = host.clientHeight;
     canvas.width = W * dpr; canvas.height = H * dpr;
-    const want = Math.round(Math.min(30, Math.max(10, W * H / 38000)));
-    while (parts.length < want) parts.push(make(true));
-    parts.length = want;
-    parts.sort((a, b) => a.z - b.z);
+    const n = Math.round(Math.min(260, W * H / 5200));
+    stars = Array.from({length: n}, () => {
+      const z = [0.3, 0.3, 0.6, 1][Math.floor(Math.random() * 4)];
+      return {x: rnd(0, W), y: rnd(0, H), z, r: rnd(0.35, 0.9) + z * 0.6, p: rnd(0, 6.28), v: rnd(0.5, 1.8), a: rnd(0.35, 0.9)};
+    });
+    moon = makeMoon();
   }
-  function draw(dt, t) {
+  function drawSky(t, dt) {
+    const mx = W * 0.83 + mouse.x * 10, my = H * 0.24 + mouse.y * 8;
+    // moon glow
+    const glow = ctx.createRadialGradient(mx, my, 0, mx, my, Math.max(180, W * 0.2));
+    glow.addColorStop(0, light ? 'rgba(170,165,140,.22)' : 'rgba(150,170,255,.2)');
+    glow.addColorStop(1, 'rgba(150,170,255,0)');
+    ctx.fillStyle = glow; ctx.fillRect(0, 0, W, H);
+    // stars
+    const cx = W / 2, cy = H * 0.4;
+    ctx.fillStyle = light ? '#5c6070' : '#e3e8ff';
+    for (const s of stars) {
+      const x = s.x + mouse.x * 24 * s.z, y = s.y + mouse.y * 16 * s.z;
+      const tw = 0.45 + 0.55 * (0.5 + 0.5 * Math.sin(t / 1000 * s.v + s.p));
+      const quiet = Math.min(1, 0.3 + Math.hypot((x - cx) / (W * 0.32), (y - cy) / (H * 0.34)) * 0.7); // fainter behind the text
+      ctx.globalAlpha = s.a * tw * quiet * (light ? 0.45 : 1);
+      ctx.beginPath(); ctx.arc(x, y, s.r, 0, 6.283); ctx.fill();
+      if (s.r > 1.3 && !light) { ctx.globalAlpha *= 0.25; ctx.fillRect(x - s.r * 3, y - 0.3, s.r * 6, 0.6); ctx.fillRect(x - 0.3, y - s.r * 3, 0.6, s.r * 6); } // a little sparkle
+    }
+    ctx.globalAlpha = 1;
+    ctx.drawImage(moon.c, mx - moon.r - 1, my - moon.r - 1, moon.c.width / dpr, moon.c.height / dpr);
+    // a shooting star now and then
+    if (!shoot && t > nextShoot && dt) shoot = {x: rnd(W * 0.05, W * 0.6), y: rnd(0, H * 0.35), life: 0, len: rnd(90, 160), ang: rnd(0.25, 0.5)};
+    if (shoot) {
+      shoot.life += dt * 1.1;
+      const d = shoot.life * W * 0.35, x = shoot.x + Math.cos(shoot.ang) * d, y = shoot.y + Math.sin(shoot.ang) * d;
+      const tx = x - Math.cos(shoot.ang) * shoot.len, ty = y - Math.sin(shoot.ang) * shoot.len;
+      const a = Math.sin(Math.min(1, shoot.life) * Math.PI);
+      const l = ctx.createLinearGradient(tx, ty, x, y);
+      l.addColorStop(0, 'rgba(255,255,255,0)'); l.addColorStop(1, light ? `rgba(80,85,100,${a * 0.6})` : `rgba(255,255,255,${a})`);
+      ctx.strokeStyle = l; ctx.lineWidth = 1.4; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(tx, ty); ctx.lineTo(x, y); ctx.stroke();
+      if (shoot.life >= 1) { shoot = null; nextShoot = t + rnd(6000, 14000); }
+    }
+  }
+  function drawSignal(t) {
+    // scan lines
+    ctx.fillStyle = light ? 'rgba(20,20,18,.03)' : 'rgba(255,255,255,.028)';
+    for (let y = 0; y < H; y += 4) ctx.fillRect(0, y, W, 1);
+    // three wavy broadcast lines, strongest at the edges, quiet in the middle behind the text
+    const cols = light ? ['15,110,86', '83,74,183', '60,60,55'] : ['159,225,203', '127,119,221', '255,255,255'];
+    const base = H - 26, pulse = ((t / 4200) % 1.4) - 0.2;
+    for (let n = 0; n < 3; n++) {
+      const amp = 7 + n * 3, alpha = [0.5, 0.35, 0.18][n] * (light ? 0.8 : 1);
+      const grad = ctx.createLinearGradient(0, 0, W, 0);
+      grad.addColorStop(0, `rgba(${cols[n]},${alpha})`);
+      grad.addColorStop(0.5, `rgba(${cols[n]},${alpha * 0.55})`);
+      grad.addColorStop(1, `rgba(${cols[n]},${alpha})`);
+      ctx.strokeStyle = grad; ctx.lineWidth = 1.3; ctx.beginPath();
+      const pts = [];
+      for (let x = 0; x <= W; x += 4) {
+        const u = x / W;
+        const y = base + n * 6 + Math.sin(u * 9 + t / 1400 + n * 1.3) * amp * Math.sin(u * Math.PI) + Math.sin(x / 9 - t / 260 + n) * 1.4 + mouse.y * 10;
+        pts.push([x, y]); x ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+      }
+      ctx.stroke();
+      // a bright pulse running along the line
+      if (n === 0) {
+        const i = Math.floor(Math.max(0, Math.min(1, pulse)) * (pts.length - 1)), [px, py] = pts[i];
+        const g = ctx.createRadialGradient(px, py, 0, px, py, 26);
+        g.addColorStop(0, `rgba(${cols[0]},.9)`); g.addColorStop(1, `rgba(${cols[0]},0)`);
+        ctx.fillStyle = g; ctx.fillRect(px - 26, py - 26, 52, 52);
+      }
+    }
+  }
+  function draw(t, dt) {
+    mouse.x += (mouse.tx - mouse.x) * Math.min(1, (dt || 1) * 2.5); mouse.y += (mouse.ty - mouse.y) * Math.min(1, (dt || 1) * 2.5);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, W, H);
-    mouse.x += (mouse.tx - mouse.x) * Math.min(1, dt * 3); mouse.y += (mouse.ty - mouse.y) * Math.min(1, dt * 3);
-    const cx = W / 2, cy = H * 0.4;
-    parts.forEach((p, i) => {
-      if (dt) {
-        p.y += p.vy * dt; p.x += (p.vx + Math.sin(t / 2600 + p.phase) * 5) * dt;
-        if (p.y < -160) { parts[i] = make(false); return; }
-        // change channel: a moment of static, then another photo
-        if (p.kind === 'tv' && t > p.nextFlick) {
-          if (!p.static) { p.static = true; p.staticUntil = t + 180; p.sp = sprite(p); }
-          else if (t > p.staticUntil) { p.static = false; p.photo = (p.photo + 1 + Math.floor(Math.random() * 4)) % PHOTOS.length; p.nextFlick = t + rnd(5000, 16000); p.sp = sprite(p); }
-          else if (Math.random() < 0.5) p.sp = sprite(p); // the static crawls
-        }
-      }
-      const x = p.x + mouse.x * 26 * p.z, y = p.y + Math.sin(t / 1800 + p.phase) * 4 * p.z + mouse.y * 16 * p.z;
-      const d = Math.hypot((x - cx) / (W * 0.34), (y - cy) / (H * 0.36));
-      const near = Math.max(0, 1 - Math.hypot(x - mouse.px, y - mouse.py) / 220);
-      ctx.globalAlpha = Math.min(1, (light ? 0.55 : 0.5) * (0.3 + p.z * 0.7) * Math.min(1, 0.12 + d * 0.88) + near * 0.25 * p.z);
-      // a gentle turn, as if rotating in depth
-      const turn = 0.82 + 0.18 * Math.cos(t / 1000 * p.spin + p.phase);
-      const sp = p.sp, sw = sp.c.width / dpr, sh = sp.c.height / dpr;
-      ctx.setTransform(dpr * turn, 0, 0, dpr, (x + sw / 2 - sp.pad) * dpr, 0);
-      ctx.drawImage(sp.c, -sw / 2, y - sp.pad, sw, sh);
-    });
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.globalAlpha = 1;
+    if (SIGNAL) drawSignal(t);
+    if (SKY) drawSky(t, dt);
   }
   function frame(t) {
     if (!running) return;
     const dt = last ? Math.min(0.05, (t - last) / 1000) : 0;
-    last = t; draw(dt, t);
+    last = t; draw(t, dt);
     requestAnimationFrame(frame);
   }
-  function start() { if (running || reduce.matches || document.hidden) return; running = true; last = 0; requestAnimationFrame(frame); }
+  function start() { if (running || reduce.matches || document.hidden) return; running = true; last = 0; nextShoot = performance.now() + 2500; requestAnimationFrame(frame); }
   function stop() { running = false; }
-  const restyle = () => { light = scheme.matches; parts.forEach(p => p.sp = sprite(p)); draw(0, performance.now()); };
 
-  size(); draw(0, 0);
-  setTimeout(restyle, 600); // once the photos have loaded
-  new ResizeObserver(() => { size(); draw(0, performance.now()); }).observe(host);
-  scheme.addEventListener('change', restyle);
+  size(); draw(1200, 0);
+  new ResizeObserver(() => { size(); draw(performance.now(), 0); }).observe(host);
+  scheme.addEventListener('change', () => { light = scheme.matches; moon = makeMoon(); draw(performance.now(), 0); });
   reduce.addEventListener('change', () => reduce.matches ? stop() : start());
   new IntersectionObserver(([e]) => e.isIntersecting ? start() : stop()).observe(host);
   document.addEventListener('visibilitychange', () => document.hidden ? stop() : start());
-  host.addEventListener('pointermove', e => {
-    const r = host.getBoundingClientRect();
-    mouse.px = e.clientX - r.left; mouse.py = e.clientY - r.top;
-    mouse.tx = mouse.px / r.width - 0.5; mouse.ty = mouse.py / r.height - 0.5;
-  });
-  host.addEventListener('pointerleave', () => { mouse.tx = mouse.ty = 0; mouse.px = mouse.py = -1e4; });
+  host.addEventListener('pointermove', e => { const r = host.getBoundingClientRect(); mouse.tx = (e.clientX - r.left) / r.width - 0.5; mouse.ty = (e.clientY - r.top) / r.height - 0.5; });
+  host.addEventListener('pointerleave', () => { mouse.tx = mouse.ty = 0; });
 })();
 </script>
 </body>
