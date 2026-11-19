@@ -1,0 +1,637 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Luno — a light home screen for Android TV</title>
+<meta name="description" content="Luno is a light, photo-first home screen for Android TV and Google TV. About 16 MB on Home. Try it in your browser.">
+<meta property="og:title" content="Luno — a light home screen for Android TV">
+<meta property="og:description" content="Photo-first, about 16 MB on Home, arranged from the remote. Try it in your browser.">
+<meta property="og:image" content="img/01.jpg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0c0d10; --bg2:#14161a; --card:#1b1d22; --line:rgba(255,255,255,.09);
+  --text:#f2f2f0; --muted:rgba(242,242,240,.62); --faint:rgba(242,242,240,.4);
+  --accent:#9fe1cb;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--text);font:400 16px/1.6 Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+a{color:inherit}
+.wrap{max-width:1120px;margin:0 auto;padding:0 24px}
+
+/* header and hero */
+header{display:flex;justify-content:space-between;align-items:center;padding:20px 0}
+.logo{display:flex;align-items:center;gap:10px;font-weight:600;font-size:18px;text-decoration:none}
+.logo i{width:26px;height:26px;border-radius:8px;background:linear-gradient(135deg,#9fe1cb,#378add);display:block}
+nav a{color:var(--muted);text-decoration:none;font-size:14px;margin-left:22px}
+nav a:hover{color:var(--text)}
+.hero{text-align:center;padding:40px 0 28px}
+.hero h1{font-size:clamp(34px,5.4vw,58px);line-height:1.05;letter-spacing:-.02em;font-weight:600;margin:0 0 16px}
+.hero p{color:var(--muted);font-size:clamp(16px,2vw,19px);max-width:640px;margin:0 auto 26px}
+.ctas{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;gap:8px;padding:12px 20px;border-radius:12px;font-weight:500;font-size:15px;text-decoration:none;border:1px solid var(--line);background:var(--card);cursor:pointer;color:var(--text)}
+.btn.primary{background:var(--text);color:#111;border-color:transparent}
+.btn:hover{filter:brightness(1.08)}
+.btn svg{width:18px;height:18px}
+
+/* the TV */
+.stage{padding:18px 0 10px}
+.tvbox{position:relative;max-width:1040px;margin:0 auto}
+.tv{position:relative;aspect-ratio:16/9;border-radius:18px;overflow:hidden;background:#000;container-type:inline-size;outline:none;
+    box-shadow:0 0 0 10px #1a1b1f,0 0 0 11px #2a2b30,0 40px 80px -20px rgba(0,0,0,.8);user-select:none;cursor:default;
+    --dp:.10417cqw; font-family:Inter,system-ui,sans-serif}
+.tv:focus-visible{box-shadow:0 0 0 10px #1a1b1f,0 0 0 12px #9fe1cb,0 40px 80px -20px rgba(0,0,0,.8)}
+.stand{width:22%;height:14px;margin:18px auto 0;border-radius:0 0 12px 12px;background:#1a1b1f}
+.hint{display:flex;gap:18px;justify-content:center;flex-wrap:wrap;color:var(--faint);font-size:13px;margin-top:18px}
+.hint kbd{font:500 12px Inter,sans-serif;color:var(--muted);border:1px solid var(--line);border-bottom-width:2px;border-radius:6px;padding:1px 7px;background:var(--bg2)}
+.demo-tools{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:14px}
+.demo-tools .btn{padding:8px 14px;font-size:13px;border-radius:10px}
+.press{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;z-index:30;background:rgba(0,0,0,.35);color:#fff;font-size:calc(var(--dp)*22);font-weight:500;border:0;cursor:pointer;transition:opacity .3s}
+.press span{background:rgba(20,20,24,.75);padding:calc(var(--dp)*14) calc(var(--dp)*26);border-radius:calc(var(--dp)*40);border:1px solid rgba(255,255,255,.2)}
+.tv:focus .press,.tv.engaged .press{opacity:0;pointer-events:none}
+
+/* inside the TV: every size is in TV dp (1920 wide = 960 dp) */
+.photo{position:absolute;inset:0;background-size:cover;background-position:center;transition:opacity 1.5s ease}
+.photo::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,.35),transparent 30%,transparent 62%,rgba(0,0,0,.45)),rgba(0,0,0,.15)}
+.listbg{position:absolute;inset:0;background:#0e1013;opacity:0;transition:opacity .4s}
+.wash{position:absolute;left:-10%;right:-10%;bottom:-30%;height:80%;opacity:0;transition:opacity .5s,background .5s;filter:blur(calc(var(--dp)*40))}
+.tv.list .listbg{opacity:1}
+.tv.list .wash{opacity:.55}
+.bar{position:absolute;top:calc(var(--dp)*32);left:calc(var(--dp)*59);right:calc(var(--dp)*59);height:calc(var(--dp)*36);display:flex;align-items:center;justify-content:space-between;z-index:5}
+.clock{display:flex;align-items:center;color:#fff;text-shadow:0 1px calc(var(--dp)*8) rgba(0,0,0,.5);white-space:nowrap}
+.clock b{font-size:calc(var(--dp)*28);font-weight:500}
+.clock i{width:1px;height:calc(var(--dp)*18);background:rgba(255,255,255,.47);margin:0 calc(var(--dp)*12)}
+.clock span{font-size:calc(var(--dp)*15);opacity:.85}
+.top{display:flex;gap:calc(var(--dp)*10);align-items:center}
+.ctl{height:calc(var(--dp)*36);min-width:calc(var(--dp)*36);display:flex;align-items:center;justify-content:center;gap:calc(var(--dp)*8);padding:0 calc(var(--dp)*9);border-radius:calc(var(--dp)*12);
+     background:rgba(36,38,43,.55);color:#fff;font-size:calc(var(--dp)*14);font-weight:500;transition:transform .16s,box-shadow .16s;box-shadow:inset 0 0 0 0 #fff}
+.tv.list .ctl{background:#24262b}
+.ctl.chip{padding:0 calc(var(--dp)*16) 0 calc(var(--dp)*12)}
+.ctl svg{width:calc(var(--dp)*18);height:calc(var(--dp)*18)}
+.ctl.f{transform:scale(1.08);box-shadow:inset 0 0 0 calc(var(--dp)*2.5) #fff}
+.ctl.bt{display:none}
+.ctl.bt.on{display:flex}
+
+.dock{position:absolute;bottom:calc(var(--dp)*32);left:50%;transform:translateX(-50%);display:flex;align-items:center;
+      padding:calc(var(--dp)*12.6) calc(var(--dp)*15.4);border-radius:calc(var(--dp)*21);background:rgba(16,18,20,.32);border:1px solid rgba(255,255,255,.14);z-index:4;transition:opacity .3s,transform .3s}
+.tv.list .dock,.tv.sheet .dock{opacity:0;pointer-events:none}
+.tv.sheet .bar .clock,.tv.sheet .bar .top{opacity:.25}
+.card{position:relative;flex:none;width:calc(var(--dp)*128);aspect-ratio:16/9;border-radius:calc(var(--dp)*11);overflow:hidden;display:flex;align-items:center;justify-content:center;
+      transition:transform .18s cubic-bezier(.2,.8,.2,1),opacity .16s,box-shadow .14s;cursor:pointer;box-shadow:inset 0 0 0 0 #fff}
+.dock .card+.card{margin-left:calc(var(--dp)*17)}
+.dock.dim .card:not(.f){opacity:.85}
+.card.f{transform:scale(1.1);box-shadow:inset 0 0 0 calc(var(--dp)*2.5) #fff;z-index:2}
+.card .name{font-weight:600;letter-spacing:-.01em;font-size:calc(var(--dp)*17);color:#fff;display:flex;align-items:center;gap:calc(var(--dp)*6)}
+.card .name svg{width:1.1em;height:1.1em}
+.card.moving{box-shadow:inset 0 0 0 calc(var(--dp)*2.5) #9fe1cb}
+.upd{position:absolute;inset:0;background:rgba(0,0,0,.72);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:calc(var(--dp)*7);color:#fff;font-size:calc(var(--dp)*13);font-weight:500}
+.upd i{display:block;width:72%;height:calc(var(--dp)*3);border-radius:9px;background:rgba(255,255,255,.28);overflow:hidden}
+.upd i b{display:block;height:100%;background:#fff;width:0;transition:width .3s}
+
+.sheet{position:absolute;inset:0;background:rgba(14,16,19,.98);z-index:6;opacity:0;pointer-events:none;transition:opacity .25s}
+.tv.sheet .sheet{opacity:1;pointer-events:auto}
+.tv.list .sheet{opacity:1;pointer-events:auto;background:transparent;z-index:3}
+.sheet .title{position:absolute;left:calc(var(--dp)*64);top:calc(var(--dp)*40);font-size:calc(var(--dp)*22);font-weight:500;color:#fff;transition:opacity .15s}
+.tv.list .sheet .title{top:auto;bottom:calc(var(--dp)*44);font-size:calc(var(--dp)*36)}
+.grid{position:absolute;left:calc(var(--dp)*64);right:calc(var(--dp)*64);top:calc(var(--dp)*96);display:grid;grid-template-columns:repeat(6,1fr);gap:calc(var(--dp)*24) calc(var(--dp)*18)}
+.tv.list .grid{grid-template-columns:repeat(6,1fr);top:calc(var(--dp)*118);gap:calc(var(--dp)*24) calc(var(--dp)*24)}
+.grid .card{width:auto}
+.grid .card.f{transform:scale(1.08)}
+.grid .cell{display:flex;flex-direction:column;gap:calc(var(--dp)*10)}
+.grid .cell span{color:rgba(255,255,255,.7);font-size:calc(var(--dp)*12);text-align:center}
+.grid .cell.f span{color:#fff}
+.tv.list .grid .cell span{display:none}
+.tv.list .grid .card{box-shadow:inset 0 0 0 1px rgba(255,255,255,.22)}
+.tv.list .grid .card.f{box-shadow:inset 0 0 0 calc(var(--dp)*2.5) #fff}
+
+.menu{position:absolute;right:calc(var(--dp)*59);top:calc(var(--dp)*80);width:calc(var(--dp)*330);padding:calc(var(--dp)*8);border-radius:calc(var(--dp)*20);
+      background:rgba(28,29,33,.97);border:1px solid rgba(255,255,255,.15);z-index:10;display:none;box-shadow:0 calc(var(--dp)*16) calc(var(--dp)*40) rgba(0,0,0,.5)}
+.menu.on{display:block}
+.menu .sec{color:rgba(255,255,255,.55);font-size:calc(var(--dp)*11);font-weight:500;padding:calc(var(--dp)*8) calc(var(--dp)*16) calc(var(--dp)*2)}
+.menu .sec:first-child{padding-top:calc(var(--dp)*2)}
+.menu hr{border:0;height:1px;background:rgba(255,255,255,.12);margin:calc(var(--dp)*6) calc(var(--dp)*12) 0}
+.row{height:calc(var(--dp)*36);display:flex;align-items:center;padding:0 calc(var(--dp)*16);border-radius:calc(var(--dp)*13);color:#fff;font-size:calc(var(--dp)*14);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
+.row.mem{height:calc(var(--dp)*48);flex-direction:column;align-items:stretch;justify-content:center;gap:calc(var(--dp)*6)}
+.row.mem i{display:block;height:calc(var(--dp)*4);border-radius:9px;background:rgba(255,255,255,.18);overflow:hidden}
+.row.mem i b{display:block;height:100%;background:#fff;transition:width .5s}
+.row.f{background:rgba(255,255,255,.97);color:#111114}
+.row.f.mem i{background:rgba(0,0,0,.15)}
+.row.f.mem i b{background:#111114}
+.row .tick{margin-left:auto}
+.menu .head{color:rgba(255,255,255,.6);font-size:calc(var(--dp)*12);font-weight:500;padding:calc(var(--dp)*6) calc(var(--dp)*16) calc(var(--dp)*8)}
+.actions{position:absolute;width:calc(var(--dp)*220);padding:calc(var(--dp)*8);border-radius:calc(var(--dp)*18);background:rgba(28,29,33,.97);border:1px solid rgba(255,255,255,.15);z-index:11;display:none}
+.actions.on{display:block}
+.movehint{position:absolute;left:0;right:0;bottom:calc(var(--dp)*150);text-align:center;color:#fff;font-size:calc(var(--dp)*15);font-weight:500;text-shadow:0 1px 8px rgba(0,0,0,.6);display:none;z-index:5}
+.movehint.on{display:block}
+.toast{position:absolute;left:50%;bottom:calc(var(--dp)*26);transform:translateX(-50%) translateY(20%);background:rgba(240,240,240,.94);color:#222;padding:calc(var(--dp)*10) calc(var(--dp)*20);border-radius:calc(var(--dp)*24);font-size:calc(var(--dp)*14);opacity:0;transition:opacity .25s,transform .25s;z-index:20;white-space:nowrap}
+.toast.on{opacity:1;transform:translateX(-50%)}
+.app{position:absolute;inset:0;z-index:25;display:none;flex-direction:column;align-items:center;justify-content:center;gap:calc(var(--dp)*14);color:#fff}
+.app.on{display:flex;animation:open .35s cubic-bezier(.2,.8,.2,1)}
+.app b{font-size:calc(var(--dp)*54);font-weight:600;letter-spacing:-.02em;display:flex;gap:calc(var(--dp)*14);align-items:center}
+.app b svg{width:1em;height:1em}
+.app span{font-size:calc(var(--dp)*16);opacity:.75}
+.off{position:absolute;inset:0;background:#000;z-index:28;display:none;align-items:center;justify-content:center;color:#666;font-size:calc(var(--dp)*16)}
+.off.on{display:flex}
+@keyframes open{from{transform:scale(.92);opacity:0}to{transform:none;opacity:1}}
+
+/* sections below */
+section{padding:72px 0}
+.kicker{color:var(--accent);font-size:13px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;margin:0 0 10px}
+h2{font-size:clamp(26px,3.4vw,36px);line-height:1.15;letter-spacing:-.015em;font-weight:600;margin:0 0 14px}
+.lead{color:var(--muted);max-width:620px;margin:0 0 36px}
+.feats{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px}
+.feat{background:var(--bg2);border:1px solid var(--line);border-radius:16px;padding:22px}
+.feat svg{width:22px;height:22px;color:var(--accent);margin-bottom:12px}
+.feat h3{font-size:16px;font-weight:600;margin:0 0 6px}
+.feat p{margin:0;color:var(--muted);font-size:14.5px}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:28px}
+.stat{background:var(--bg2);border:1px solid var(--line);border-radius:16px;padding:22px}
+.stat b{display:block;font-size:34px;font-weight:600;letter-spacing:-.02em}
+.stat span{color:var(--muted);font-size:14px}
+.bars{background:var(--bg2);border:1px solid var(--line);border-radius:16px;padding:22px}
+.bars div{display:grid;grid-template-columns:150px 1fr 70px;gap:14px;align-items:center;font-size:14px;margin:8px 0}
+.bars i{display:block;height:10px;border-radius:9px;background:rgba(255,255,255,.08);overflow:hidden}
+.bars i b{display:block;height:100%;border-radius:9px}
+.bars span:last-child{color:var(--muted);text-align:right}
+.steps{counter-reset:s;display:grid;gap:14px}
+.step{background:var(--bg2);border:1px solid var(--line);border-radius:16px;padding:20px 22px 20px 64px;position:relative}
+.step::before{counter-increment:s;content:counter(s);position:absolute;left:20px;top:19px;width:28px;height:28px;border-radius:50%;background:var(--card);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600}
+.step h3{font-size:16px;margin:0 0 4px;font-weight:600}
+.step p{margin:0 0 10px;color:var(--muted);font-size:14.5px}
+pre{margin:0;position:relative;background:#0a0b0d;border:1px solid var(--line);border-radius:12px;padding:14px 16px;overflow-x:auto;font:13.5px/1.6 ui-monospace,SFMono-Regular,Menlo,monospace;color:#d8d8d4}
+pre .c{color:#6b6e75}
+.copy{position:absolute;top:8px;right:8px;padding:4px 10px;font:500 12px Inter,sans-serif;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--muted);cursor:pointer}
+footer{border-top:1px solid var(--line);padding:28px 0 40px;color:var(--faint);font-size:13.5px}
+footer a{color:var(--muted)}
+@media (max-width:640px){
+  nav a:not(:last-child){display:none}
+  .bars div{grid-template-columns:96px 1fr 52px}
+  .hint{font-size:12px;gap:10px}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <a class="logo" href="#"><i></i>Luno</a>
+    <nav><a href="#features">Features</a><a href="#light">Light by design</a><a href="#install">Install</a><a href="https://github.com/hamdiwanis/Luno">GitHub</a></nav>
+  </header>
+
+  <div class="hero">
+    <h1>A home screen your TV<br>can actually afford.</h1>
+    <p>Luno is a light, photo-first home screen for Android TV and Google TV. A new photo every ten minutes, your apps in a floating dock, about 16&nbsp;MB of memory on Home.</p>
+    <div class="ctas">
+      <a class="btn primary" href="https://github.com/hamdiwanis/Luno/releases/latest"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v12M7 11l5 5 5-5M5 20h14"/></svg>Download the APK</a>
+      <a class="btn" href="#demo">Try it here</a>
+    </div>
+  </div>
+</div>
+
+<div class="stage" id="demo">
+  <div class="wrap">
+    <div class="tvbox">
+      <div class="tv" id="tv" tabindex="0" aria-label="Luno demo. Use the arrow keys, Enter, Escape and M.">
+        <div class="photo" id="pa"></div><div class="photo" id="pb" style="opacity:0"></div>
+        <div class="listbg"></div><div class="wash" id="wash"></div>
+        <div class="bar">
+          <div class="clock"><b id="time">7:28</b><i></i><span id="date">Thursday 19 November</span></div>
+          <div class="top">
+            <div class="ctl chip bt" id="bt"><svg viewBox="0 0 24 24" fill="#fff"><path d="M17.71 7.71L12 2h-1v7.59L6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 11 14.41V22h1l5.71-5.71-4.3-4.29 4.3-4.29zM13 5.83l1.88 1.88L13 9.59V5.83zm1.88 10.46L13 18.17v-3.76l1.88 1.88z"/></svg><span>Headphones</span></div>
+            <div class="ctl chip" data-top="0"><svg viewBox="0 0 24 24" fill="#fff"><path d="M1 9l2 2c4.97-4.97 13.03-4.97 18 0l2-2C16.93 2.93 7.08 2.93 1 9zm8 8l3 3 3-3c-1.65-1.66-4.34-1.66-6 0zm-4-4l2 2c2.76-2.76 7.24-2.76 10 0l2-2C15.14 9.14 8.87 9.14 5 13z"/></svg><span>Home Wi-Fi</span></div>
+            <div class="ctl" data-top="1"><svg viewBox="0 0 24 24" fill="#fff"><path d="M4 4h7v7H4zM4 13h7v7H4zM13 13h7v7h-7z"/><path d="M16.5 3l4.5 4.5-4.5 4.5L12 7.5z"/></svg></div>
+            <div class="ctl" data-top="2"><svg viewBox="0 0 24 24" fill="#fff"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 00.12-.61l-1.92-3.32a.49.49 0 00-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.48.48 0 00-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96a.48.48 0 00-.59.22L2.74 8.87a.47.47 0 00.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58a.49.49 0 00-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32a.47.47 0 00-.12-.61l-2.01-1.58zM12 15.6A3.6 3.6 0 1115.6 12 3.6 3.6 0 0112 15.6z"/></svg></div>
+          </div>
+        </div>
+        <div class="dock" id="dock"></div>
+        <div class="sheet"><div class="title" id="title">Apps</div><div class="grid" id="grid"></div></div>
+        <div class="movehint" id="movehint">◀ ▶ to move · OK when done</div>
+        <div class="menu" id="menu"></div>
+        <div class="actions" id="actions"></div>
+        <div class="app" id="app"></div>
+        <div class="off" id="off">The TV is asleep · press any key</div>
+        <div class="toast" id="toast"></div>
+        <button class="press" id="press" type="button"><span>Click here, then use your arrow keys</span></button>
+      </div>
+      <div class="stand"></div>
+    </div>
+    <div class="hint">
+      <span><kbd>←</kbd> <kbd>→</kbd> <kbd>↑</kbd> <kbd>↓</kbd> move</span>
+      <span><kbd>Enter</kbd> open · hold for options</span>
+      <span><kbd>Esc</kbd> back</span>
+      <span><kbd>M</kbd> Features menu</span>
+    </div>
+    <div class="demo-tools">
+      <button class="btn" id="simUpdate" type="button">Simulate an app update</button>
+      <button class="btn" id="simBt" type="button">Connect headphones</button>
+    </div>
+  </div>
+</div>
+
+<div class="wrap">
+  <section id="features">
+    <p class="kicker">Features</p>
+    <h2>Everything a home screen needs.<br>Nothing it doesn't.</h2>
+    <p class="lead">No rows of recommendations, no autoplaying previews, no account. Just your apps, a good photo and a handful of things the stock launcher never gave you.</p>
+    <div class="feats">
+      <div class="feat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 15l5-5 5 5 3-3 5 5"/></svg><h3>Photo-first</h3><p>A new photo every ten minutes, a floating dock, and every other app one press down. Or the Apps list home: no photo, every app as a banner.</p></div>
+      <div class="feat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h10M7 12h10M7 17h6"/><path d="M17 15l2 2-2 2"/></svg><h3>Arranged from the remote</h3><p>Hold OK on any app to move it, add it to the dock or hide it. Or let the apps list sort itself by what you used last.</p></div>
+      <div class="feat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v3M12 18v3M4.5 12h-1.5M21 12h-1.5"/><circle cx="12" cy="12" r="5"/></svg><h3>Power-on app</h3><p>Open your live TV app, or whatever you watched last, the moment the TV turns on.</p></div>
+      <div class="feat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2 2M9 2h6"/></svg><h3>Sleep timer</h3><p>Turn the TV off in 15 minutes to 2 hours. Turning it off yourself cancels it.</p></div>
+      <div class="feat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="7" width="16" height="10" rx="2"/><path d="M8 7V4M12 7V4M16 7V4M8 20v-3M12 20v-3M16 20v-3"/></svg><h3>Memory at a glance</h3><p>See how much memory is in use, and close what's running in the background with one press.</p></div>
+      <div class="feat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v10M8 10l4 4 4-4M5 19h14"/></svg><h3>Updates you can see</h3><p>An app updating from the Play Store shows "Updating" and its progress right on its card.</p></div>
+    </div>
+  </section>
+
+  <section id="light">
+    <p class="kicker">Light by design</p>
+    <h2>Built for a 2&nbsp;GB TV.</h2>
+    <p class="lead">Plain Java, no libraries, no Gradle. The photo is let go while you watch something, and nothing runs in the background. Measured on a TCL Google TV with Android 11.</p>
+    <div class="stats">
+      <div class="stat"><b>16 MB</b><span>on Home, photo showing</span></div>
+      <div class="stat"><b>12 MB</b><span>while another app is in front</span></div>
+      <div class="stat"><b>4.7 MB</b><span>the whole APK, photos included</span></div>
+      <div class="stat"><b>0</b><span>libraries, accounts or trackers</span></div>
+    </div>
+  </section>
+
+  <section id="install">
+    <p class="kicker">Install</p>
+    <h2>Three commands from a computer.</h2>
+    <p class="lead">Luno isn't on the Play Store. Install it over the TV's own network debugging (Settings &gt; System &gt; Developer options).</p>
+    <div class="steps">
+      <div class="step"><h3>Download the APK</h3><p>From the <a href="https://github.com/hamdiwanis/Luno/releases/latest">latest release</a> on GitHub. Android 9 or later.</p></div>
+      <div class="step"><h3>Install it and make it your home</h3><p>With adb, using your TV's address:</p>
+<pre><button class="copy" type="button">Copy</button>adb connect 192.168.1.20:5555
+adb install luno-1.0.apk
+adb shell cmd package set-home-activity --user 0 app.luno.home/.MainActivity</pre></div>
+      <div class="step"><h3>Turn off the stock home</h3><p>Google TV has no home picker, so the stock launcher has to step aside. <code>debloat.sh</code> in the repo does it, along with the TV's promotions and preloaded apps, and can undo it all.</p>
+<pre><button class="copy" type="button">Copy</button>TV=192.168.1.20:5555 ./debloat.sh --dry-run   <span class="c"># see what would change</span>
+TV=192.168.1.20:5555 ./debloat.sh             <span class="c"># do it (--restore to undo)</span></pre></div>
+    </div>
+  </section>
+</div>
+
+<footer>
+  <div class="wrap">
+    Luno is open source under the <a href="https://github.com/hamdiwanis/Luno/blob/main/LICENSE">MIT licence</a>. Photos from Wikimedia Commons under their own licences: <a href="https://github.com/hamdiwanis/Luno/blob/main/WALLPAPER-CREDITS.md">credits</a>. The apps in the demo are made up.
+  </div>
+</footer>
+
+<script>
+(() => {
+  const PHOTOS = ['img/01.jpg', 'img/02.jpg', 'img/04.jpg', 'img/07.jpg', 'img/09.jpg', 'img/11.jpg'];
+  const ICON = {
+    play: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>',
+    live: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M8 2l4 4 4-4"/></svg>',
+    note: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 3v10.55A4 4 0 1014 17V7h4V3z"/></svg>',
+    star: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3 7h7l-5.5 4.5 2 7.5-6.5-4.5L5.5 21l2-7.5L2 9h7z"/></svg>',
+    globe: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 010 18M12 3a14 14 0 000 18"/></svg>',
+    pad: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 8h10a5 5 0 014.9 6l-.6 3a2.5 2.5 0 01-4.3 1.2L15 16H9l-2 2.2A2.5 2.5 0 012.7 17l-.6-3A5 5 0 017 8zm0 3v1.5H5.5V14H7v1.5h1.5V14H10v-1.5H8.5V11zm9.5 0a1 1 0 100 2 1 1 0 000-2zm-2 2a1 1 0 100 2 1 1 0 000-2z"/></svg>',
+  };
+  // Made-up apps: banner colour, wordmark, an icon, and the wash colour of the apps list.
+  const APPS = [
+    {id:'cinema', name:'Cinema', bg:'#b3261e', ink:'#fff', icon:'play', wash:'#b3261e'},
+    {id:'live', name:'LiveTV', bg:'#1b1d22', ink:'#fff', icon:'live', wash:'#e24b4a'},
+    {id:'tube', name:'Tubely', bg:'#f4f4f2', ink:'#c4161c', icon:'play', wash:'#c4161c'},
+    {id:'wave', name:'Wave', bg:'#1d1a3a', ink:'#a99cff', icon:'note', wash:'#534ab7'},
+    {id:'sport', name:'Sport+', bg:'#0f6e56', ink:'#fff', icon:'star', wash:'#1d9e75'},
+    {id:'kids', name:'Kidz', bg:'#fac775', ink:'#412402', icon:'star', wash:'#ef9f27'},
+    {id:'arcade', name:'Arcade', bg:'#26215c', ink:'#cecbf6', icon:'pad', wash:'#7f77dd'},
+    {id:'news', name:'News 24', bg:'#f1efe8', ink:'#2c2c2a', icon:'globe', wash:'#888780'},
+    {id:'play', name:'App Store', bg:'#ffffff', ink:'#185fa5', icon:'star', wash:'#378add'},
+    {id:'podcasts', name:'Pods', bg:'#4b1528', ink:'#f4c0d1', icon:'note', wash:'#d4537e'},
+    {id:'docs', name:'Docuflix', bg:'#04342c', ink:'#9fe1cb', icon:'play', wash:'#1d9e75'},
+    {id:'browser', name:'Browse', bg:'#0c447c', ink:'#e6f1fb', icon:'globe', wash:'#378add'},
+  ];
+  const byId = Object.fromEntries(APPS.map(a => [a.id, a]));
+  const S = {
+    mode: 'photo', area: 'dock', dock: ['cinema', 'live', 'tube', 'wave', 'sport', 'kids'], order: APPS.map(a => a.id),
+    di: 0, ti: 1, si: 0, mi: 0, ai: 0, hidden: [], recent: {}, recentFirst: false, moving: null,
+    powerOn: 'Stay on Home', sleep: 0, mem: 0.62, feats: {Chromecast: true, 'Screen mirroring': false, 'TV Guard': false},
+    updating: {}, bt: false, menu: null, chooser: null, actions: null, inApp: null, asleep: false,
+  };
+  const $ = id => document.getElementById(id);
+  const tv = $('tv'), dock = $('dock'), grid = $('grid'), menu = $('menu'), act = $('actions');
+  const tops = [...tv.querySelectorAll('[data-top]')];
+
+  // ---- photos and clock
+  let pi = 0, front = $('pa'), back = $('pb');
+  PHOTOS.forEach(p => { const i = new Image(); i.src = p; });
+  front.style.backgroundImage = `url(${PHOTOS[0]})`;
+  setInterval(() => {
+    if (S.mode !== 'photo') return;
+    pi = (pi + 1) % PHOTOS.length;
+    back.style.backgroundImage = `url(${PHOTOS[pi]})`;
+    back.style.opacity = 1; front.style.opacity = 0;
+    [front, back] = [back, front];
+  }, 9000);
+  const tick = () => {
+    const d = new Date();
+    $('time').textContent = d.toLocaleTimeString([], {hour: 'numeric', minute: '2-digit'}).replace(/\s?[AP]M$/i, '');
+    $('date').textContent = d.toLocaleDateString('en-GB', {weekday: 'long', day: 'numeric', month: 'long'});
+  };
+  tick(); setInterval(tick, 10000);
+
+  // ---- building
+  const visible = () => S.order.filter(id => !S.hidden.includes(id));
+  const dockApps = () => S.dock.filter(id => !S.hidden.includes(id));
+  function sheetApps() {
+    let list = S.mode === 'list' ? visible() : visible().filter(id => !S.dock.includes(id));
+    if (S.recentFirst) list = list.slice().sort((a, b) => (S.recent[b] || 0) - (S.recent[a] || 0));
+    return list;
+  }
+  function card(a) {
+    const u = S.updating[a.id];
+    return `<div class="card" data-id="${a.id}" style="background:${a.bg};color:${a.ink}"><div class="name" style="color:${a.ink}">${ICON[a.icon]}${a.name}</div>` +
+      (u != null ? `<div class="upd">Updating<i><b style="width:${Math.round(u * 100)}%"></b></i></div>` : '') + `</div>`;
+  }
+  function build() {
+    tv.classList.toggle('list', S.mode === 'list');
+    dock.innerHTML = dockApps().map(id => card(byId[id])).join('');
+    grid.innerHTML = sheetApps().map(id => `<div class="cell">${card(byId[id])}<span>${byId[id].name}</span></div>`).join('');
+    paint();
+  }
+  const dockCards = () => [...dock.children];
+  const gridCells = () => [...grid.children];
+  const cols = () => 6;
+
+  // ---- focus painting
+  function paint() {
+    S.di = Math.min(S.di, Math.max(0, dockCards().length - 1));
+    S.si = Math.min(S.si, Math.max(0, gridCells().length - 1));
+    dockCards().forEach((c, i) => {
+      c.classList.toggle('f', S.area === 'dock' && i === S.di);
+      c.classList.toggle('moving', S.moving === c.dataset.id);
+    });
+    dock.classList.toggle('dim', S.area === 'dock');
+    gridCells().forEach((c, i) => {
+      const on = S.area === 'sheet' && i === S.si;
+      c.classList.toggle('f', on);
+      c.firstElementChild.classList.toggle('f', on);
+    });
+    tops.forEach((t, i) => t.classList.toggle('f', S.area === 'top' && i === S.ti));
+    tv.classList.toggle('sheet', S.mode === 'photo' && S.area === 'sheet');
+    // the apps list: the focused app's name, large, and its colour washed over the lower screen
+    if (S.mode === 'list') {
+      const id = S.area === 'sheet' ? gridCells()[S.si]?.querySelector('.card').dataset.id : null;
+      const t = S.area === 'top' || S.area === 'menu' ? ['Network', 'Features', 'Settings'][S.ti] : id ? byId[id].name : '';
+      setTitle(t);
+      $('wash').style.background = id ? `radial-gradient(60% 70% at 30% 70%, ${byId[id].wash}, transparent 70%), radial-gradient(50% 60% at 75% 80%, ${byId[id].bg}, transparent 70%)` : 'transparent';
+    } else setTitle('Apps');
+    $('bt').classList.toggle('on', S.bt);
+    $('movehint').classList.toggle('on', !!S.moving);
+  }
+  let titleTimer;
+  function setTitle(t) {
+    const el = $('title');
+    if (el.textContent === t) return;
+    el.style.opacity = 0;
+    clearTimeout(titleTimer);
+    titleTimer = setTimeout(() => { el.textContent = t; el.style.opacity = 1; }, 110);
+  }
+
+  // ---- menus
+  const memText = extra => `Memory · ${(S.mem * 2).toFixed(1)} of 2.0 GB${extra ? ' · ' + extra : ' used'}`;
+  function openMenu(focus = 0) {
+    S.actions = null; act.classList.remove('on');
+    S.chooser = null;
+    const rows = [
+      {sec: 'Home screen'},
+      {t: `Home · ${S.mode === 'photo' ? 'Photo' : 'Apps list'}`, go: () => { S.mode = S.mode === 'photo' ? 'list' : 'photo'; closeMenu(); S.area = S.mode === 'list' ? 'sheet' : 'dock'; S.si = 0; build(); }},
+      {t: `Apps order · ${S.recentFirst ? 'Recently used first' : 'Your order'}`, go: () => { S.recentFirst = !S.recentFirst; build(); openMenu(1); }},
+      {t: `Hidden apps · ${S.hidden.length || 'None'}`, go: () => S.hidden.length ? choose('Hidden apps', S.hidden.map(id => 'Show ' + byId[id].name), -1, i => { S.hidden.splice(i, 1); build(); }, 2) : toast('Hold OK on an app and choose Hide')},
+      {line: 1, sec: 'TV'},
+      {t: `On power-on · ${S.powerOn}`, go: () => {
+        const opts = ['Stay on Home', 'Last used app', ...visible().map(id => byId[id].name)];
+        choose('Open when the TV turns on', opts, opts.indexOf(S.powerOn), i => { S.powerOn = opts[i]; }, 3);
+      }},
+      {t: `Sleep timer · ${S.sleep ? S.sleep + ' min left' : 'Off'}`, go: () => {
+        const m = [0, 15, 30, 60, 90, 120], l = ['Off', '15 minutes', '30 minutes', '1 hour', '1 h 30 min', '2 hours'];
+        choose('Turn the TV off after', l, S.sleep ? -1 : 0, i => { S.sleep = m[i]; if (m[i]) toast('The TV turns off in ' + l[i]); }, 4);
+      }},
+      {mem: 1, t: memText(), go: el => {
+        el.querySelector('span').textContent = 'Memory · Freeing…';
+        setTimeout(() => {
+          const before = S.mem; S.mem = Math.max(0.42, S.mem - 0.09 - Math.random() * 0.05);
+          el.querySelector('span').textContent = memText('freed ' + Math.round((before - S.mem) * 2048) + ' MB');
+          el.querySelector('b').style.width = (S.mem * 100) + '%';
+        }, 700);
+      }},
+      {line: 1, sec: 'Background apps · off frees memory'},
+      ...Object.keys(S.feats).map(k => ({t: `${k} · ${S.feats[k] ? 'On' : 'Off'}`, go: el => { S.feats[k] = !S.feats[k]; el.textContent = `${k} · ${S.feats[k] ? 'On' : 'Off'}`; S.mem += S.feats[k] ? 0.03 : -0.03; }})),
+    ];
+    let html = '', n = 0;
+    S.menu = [];
+    for (const r of rows) {
+      if (r.line) html += '<hr>';
+      if (r.sec) { html += `<div class="sec">${r.sec}</div>`; continue; }
+      html += r.mem ? `<div class="row mem" data-r="${n}"><span>${r.t}</span><i><b style="width:${S.mem * 100}%"></b></i></div>` : `<div class="row" data-r="${n}">${r.t}</div>`;
+      S.menu.push(r); n++;
+    }
+    menu.innerHTML = html; menu.classList.add('on');
+    S.area = 'menu'; S.mi = focus; S.ti = 1; paintMenu(); paint();
+  }
+  function choose(head, labels, sel, pick, back) {
+    S.chooser = {pick, back};
+    menu.innerHTML = `<div class="head">${head}</div>` + labels.map((l, i) => `<div class="row" data-r="${i}">${l}${i === sel ? '<span class="tick">✓</span>' : ''}</div>`).join('');
+    S.menu = labels.map((l, i) => ({go: () => { pick(i); openMenu(back); }}));
+    S.mi = Math.max(0, sel); paintMenu();
+  }
+  function paintMenu() { [...menu.querySelectorAll('.row')].forEach((r, i) => r.classList.toggle('f', i === S.mi)); }
+  function closeMenu() { menu.classList.remove('on'); S.menu = null; S.chooser = null; S.area = 'top'; paint(); }
+  function openActions() {
+    const inDock = S.area === 'dock';
+    const id = currentId(); if (!id) return;
+    const items = [];
+    if (inDock || !S.recentFirst) items.push(['Move', () => { S.moving = id; paint(); }]);
+    if (inDock) items.push(['Remove from dock', () => { S.dock = S.dock.filter(x => x !== id); build(); }]);
+    else if (S.mode === 'photo') items.push(['Add to dock', () => {
+      if (dockApps().length >= 6) return toast('The dock is full: remove an app from it first');
+      S.dock.push(id); S.area = 'dock'; build(); S.di = dockApps().length - 1; paint();
+    }]);
+    items.push(['Hide', () => { S.hidden.push(id); build(); toast('Hidden. Features > Hidden apps brings it back.'); }]);
+    S.actions = {items, from: S.area, i: 0};
+    act.innerHTML = items.map(([l], i) => `<div class="row" data-a="${i}">${l}</div>`).join('');
+    const el = (inDock ? dockCards()[S.di] : gridCells()[S.si].firstElementChild).getBoundingClientRect(), box = tv.getBoundingClientRect();
+    act.classList.add('on');
+    const w = act.offsetWidth, h = act.offsetHeight;
+    let top = el.top - box.top - h - 10; if (top < 10) top = el.bottom - box.top + 10;
+    act.style.left = Math.max(10, Math.min(box.width - w - 10, el.left - box.left + el.width / 2 - w / 2)) + 'px';
+    act.style.top = top + 'px';
+    paintActions();
+  }
+  function paintActions() { [...act.children].forEach((r, i) => r.classList.toggle('f', i === S.actions.i)); }
+  function closeActions() { act.classList.remove('on'); S.actions = null; }
+
+  // ---- doing things
+  const currentId = () => S.area === 'dock' ? dockApps()[S.di] : S.area === 'sheet' ? sheetApps()[S.si] : null;
+  function openApp(id) {
+    const a = byId[id]; if (!a) return;
+    if (S.updating[id] != null) return toast(a.name + ' is updating');
+    S.recent[id] = Date.now();
+    const el = $('app');
+    el.style.background = a.bg; el.style.color = a.ink;
+    el.innerHTML = `<b>${ICON[a.icon]}${a.name}</b><span>A made-up app · press Esc for Home</span>`;
+    el.classList.add('on'); S.inApp = id;
+  }
+  function home() {
+    $('app').classList.remove('on'); S.inApp = null; closeActions(); if (S.menu) closeMenu(); S.moving = null;
+    if (S.recentFirst) S.si = 0;
+    S.area = S.mode === 'list' ? 'sheet' : 'dock'; build();
+  }
+  let toastTimer;
+  function toast(t) {
+    const el = $('toast'); el.textContent = t; el.classList.add('on');
+    clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.remove('on'), 2400);
+  }
+  function moveDock(dir) {
+    const list = dockApps(), from = list.indexOf(S.moving), to = from + dir;
+    if (to < 0 || to >= list.length) return;
+    const a = S.dock.indexOf(list[from]), b = S.dock.indexOf(list[to]);
+    [S.dock[a], S.dock[b]] = [S.dock[b], S.dock[a]]; S.di = to; build();
+  }
+  function moveSheet(delta) {
+    const list = sheetApps(), from = list.indexOf(S.moving), to = from + delta;
+    if (to < 0 || to >= list.length) return;
+    const a = S.order.indexOf(list[from]), b = S.order.indexOf(list[to]);
+    S.order.splice(a, 1); S.order.splice(b, 0, list[from]); S.si = to; build();
+  }
+
+  // ---- keys
+  let held = false;
+  function key(k, repeat) {
+    if (S.asleep) { S.asleep = false; $('off').classList.remove('on'); return; }
+    if (S.inApp) { if (k === 'back' || k === 'home') home(); return; }
+    if (k === 'home') return home();
+    if (k === 'menu') { if (S.menu) closeMenu(); else openMenu(); return; }
+    if (S.actions) {
+      if (k === 'up') S.actions.i = Math.max(0, S.actions.i - 1);
+      else if (k === 'down') S.actions.i = Math.min(S.actions.items.length - 1, S.actions.i + 1);
+      else if (k === 'ok') { const f = S.actions.items[S.actions.i][1]; closeActions(); f(); return; }
+      else if (k === 'back') closeActions();
+      if (S.actions) paintActions(); return;
+    }
+    if (S.moving) {
+      const inDock = S.area === 'dock', c = cols();
+      if (k === 'ok' || k === 'back') { S.moving = null; paint(); }
+      else if (inDock && (k === 'left' || k === 'right')) moveDock(k === 'left' ? -1 : 1);
+      else if (!inDock) moveSheet({left: -1, right: 1, up: -c, down: c}[k] || 0);
+      return;
+    }
+    if (S.menu) {
+      if (k === 'up') S.mi = Math.max(0, S.mi - 1);
+      else if (k === 'down') S.mi = Math.min(S.menu.length - 1, S.mi + 1);
+      else if (k === 'ok') return S.menu[S.mi].go(menu.querySelectorAll('.row')[S.mi]);
+      else if (k === 'back') { if (S.chooser) openMenu(S.chooser.back); else closeMenu(); return; }
+      return paintMenu();
+    }
+    const c = cols(), n = gridCells().length;
+    if (S.area === 'dock') {
+      if (k === 'left') S.di = Math.max(0, S.di - 1);
+      else if (k === 'right') S.di = Math.min(dockCards().length - 1, S.di + 1);
+      else if (k === 'up') S.area = 'top';
+      else if (k === 'down' && n) { S.area = 'sheet'; S.si = 0; }
+      else if (k === 'ok') return openApp(dockApps()[S.di]);
+    } else if (S.area === 'top') {
+      if (k === 'left') S.ti = Math.max(0, S.ti - 1);
+      else if (k === 'right') S.ti = Math.min(2, S.ti + 1);
+      else if (k === 'down') S.area = S.mode === 'list' ? 'sheet' : 'dock';
+      else if (k === 'ok') {
+        if (S.ti === 1) return openMenu();
+        return toast(S.ti === 0 ? 'Opens Wi-Fi settings' : 'Opens the TV settings');
+      }
+    } else if (S.area === 'sheet') {
+      if (k === 'left' && S.si % c) S.si--;
+      else if (k === 'right' && S.si % c < c - 1 && S.si < n - 1) S.si++;
+      else if (k === 'down' && S.si + c < n) S.si += c;
+      else if (k === 'down' && Math.floor(S.si / c) < Math.floor((n - 1) / c)) S.si = n - 1;
+      else if (k === 'up') { if (S.si >= c) S.si -= c; else S.area = S.mode === 'list' ? 'top' : 'dock'; }
+      else if (k === 'back' && S.mode === 'photo') S.area = 'dock';
+      else if (k === 'ok') return openApp(sheetApps()[S.si]);
+    }
+    paint();
+  }
+  const KEYS = {ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'up', ArrowDown: 'down', Enter: 'ok', ' ': 'ok', Escape: 'back', Backspace: 'back', m: 'menu', M: 'menu', h: 'home', H: 'home'};
+  tv.addEventListener('keydown', e => {
+    const k = KEYS[e.key]; if (!k) return;
+    e.preventDefault();
+    if (k === 'ok') {
+      // hold OK: the card's options (like holding the remote's OK); a plain press opens the app
+      if (e.repeat) { if (!held && !S.menu && !S.actions && !S.moving && (S.area === 'dock' || S.area === 'sheet') && !S.inApp) { held = true; openActions(); } return; }
+      held = false; return;
+    }
+    key(k);
+  });
+  tv.addEventListener('keyup', e => { if (KEYS[e.key] === 'ok') { if (!held) key('ok'); held = false; } });
+
+  // ---- mouse
+  tv.addEventListener('focus', () => tv.classList.add('engaged'));
+  $('press').addEventListener('click', () => tv.focus());
+  tv.addEventListener('click', e => {
+    tv.focus();
+    if (S.asleep || S.inApp) return key('back');
+    const row = e.target.closest('.row'), cardEl = e.target.closest('.card'), top = e.target.closest('[data-top]');
+    if (row && row.dataset.a != null) { S.actions.i = +row.dataset.a; return key('ok'); }
+    if (row && row.dataset.r != null) { S.mi = +row.dataset.r; paintMenu(); return key('ok'); }
+    if (S.actions) return closeActions();
+    if (S.menu && !e.target.closest('.menu')) return closeMenu();
+    if (S.moving) { S.moving = null; return paint(); }
+    if (top) { S.area = 'top'; S.ti = +top.dataset.top; paint(); return key('ok'); }
+    if (cardEl) {
+      const inDock = !!e.target.closest('.dock');
+      S.area = inDock ? 'dock' : 'sheet';
+      if (inDock) S.di = dockCards().indexOf(cardEl); else S.si = gridCells().indexOf(cardEl.parentElement);
+      paint(); return key('ok');
+    }
+  });
+  tv.addEventListener('contextmenu', e => {
+    const cardEl = e.target.closest('.card'); if (!cardEl || S.inApp) return;
+    e.preventDefault();
+    const inDock = !!e.target.closest('.dock');
+    S.area = inDock ? 'dock' : 'sheet';
+    if (inDock) S.di = dockCards().indexOf(cardEl); else S.si = gridCells().indexOf(cardEl.parentElement);
+    paint(); openActions();
+  });
+  tv.addEventListener('mousemove', e => {
+    if (S.menu || S.actions || S.moving || S.inApp) return;
+    const cardEl = e.target.closest('.card'), top = e.target.closest('[data-top]');
+    if (cardEl) {
+      const inDock = !!e.target.closest('.dock'), i = inDock ? dockCards().indexOf(cardEl) : gridCells().indexOf(cardEl.parentElement);
+      if ((inDock ? 'dock' : 'sheet') !== S.area || i !== (inDock ? S.di : S.si)) { S.area = inDock ? 'dock' : 'sheet'; if (inDock) S.di = i; else S.si = i; paint(); }
+    } else if (top && (S.area !== 'top' || S.ti !== +top.dataset.top)) { S.area = 'top'; S.ti = +top.dataset.top; paint(); }
+  });
+  tv.addEventListener('wheel', e => { if (S.mode === 'photo' && S.area === 'dock' && e.deltaY > 30 && gridCells().length) { e.preventDefault(); S.area = 'sheet'; S.si = 0; paint(); } }, {passive: false});
+
+  // ---- demo buttons
+  $('simUpdate').addEventListener('click', () => {
+    const ids = dockApps().filter(id => S.updating[id] == null);
+    if (!ids.length) return;
+    const id = ids[Math.floor(Math.random() * ids.length)];
+    S.updating[id] = 0; build();
+    const t = setInterval(() => {
+      S.updating[id] = Math.min(1, S.updating[id] + 0.07 + Math.random() * 0.06);
+      const b = tv.querySelector(`.card[data-id="${id}"] .upd b`); if (b) b.style.width = (S.updating[id] * 100) + '%';
+      if (S.updating[id] >= 1) { clearInterval(t); setTimeout(() => { delete S.updating[id]; build(); }, 400); }
+    }, 450);
+  });
+  $('simBt').addEventListener('click', e => {
+    S.bt = !S.bt; e.target.textContent = S.bt ? 'Disconnect headphones' : 'Connect headphones';
+    paint();
+  });
+
+  // copy buttons
+  document.querySelectorAll('.copy').forEach(b => b.addEventListener('click', () => {
+    const text = b.parentElement.innerText.replace(/^Copy\n?/, '').split('\n').map(l => l.replace(/\s+#.*$/, '')).join('\n').trim();
+    navigator.clipboard?.writeText(text).then(() => { b.textContent = 'Copied'; setTimeout(() => b.textContent = 'Copy', 1500); });
+  }));
+
+  build();
+})();
+</script>
+</body>
+</html>
