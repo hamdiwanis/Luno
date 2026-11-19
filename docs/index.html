@@ -53,6 +53,8 @@ a{color:inherit}
 header{display:flex;justify-content:space-between;align-items:center;padding:24px 0}
 .logo{display:flex;align-items:center;gap:12px;font-weight:600;font-size:22px;text-decoration:none}
 .hl{font-weight:600;color:var(--text)} /* just a step up from the paragraph's muted grey */ /* 'memory' and the background figure in the hero */
+.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.hero p.facts{min-height:3.2em;display:grid;place-items:center;font-size:clamp(20px,2.6vw,26px);color:var(--text)} /* one fact at a time, two lines kept */
 .ch{opacity:0;filter:blur(3px);transition:opacity .28s ease,filter .28s ease} /* the hero paragraph, written in */
 .ch.on{opacity:1;filter:none}
 .caret{display:inline-block;width:2px;height:1.05em;margin:0 -3px 0 1px;vertical-align:-.16em;background:var(--accent);animation:blink 1s steps(1) infinite}
@@ -782,38 +784,50 @@ TV=192.168.1.20:5555 ./debloat.sh             <span class="c"># do it (--restore
 })();
 </script>
 <script>
-// The hero paragraph writes itself in: letter by letter (each fades in from a soft blur) behind a
-// blinking cursor, with a pause at each full stop before the next sentence. Every letter keeps its
-// place from the start, so nothing moves; with reduced motion the text is simply there.
+// The hero line: short facts, one at a time. Each types in behind a blinking cursor (letters fade
+// in from a soft blur), stays a moment, erases itself and the next one types in. The line keeps a
+// fixed height, so nothing below moves. Screen readers get the full description instead; with
+// reduced motion (or no script) the original paragraph stays as it is.
 (() => {
   const p = document.getElementById('lede');
   if (!p || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-  const chars = [];
-  const wrap = node => {
-    for (const n of [...node.childNodes]) {
-      if (n.nodeType !== 3) { wrap(n); continue; }
-      const frag = document.createDocumentFragment();
-      for (const ch of n.textContent) {
-        const s = document.createElement('span');
-        s.className = 'ch'; s.textContent = ch;
-        frag.appendChild(s); chars.push(s);
-      }
-      n.replaceWith(frag);
-    }
-  };
-  wrap(p);
+  const FACTS = [
+    'A light, photo-first home screen for Android TV.',
+    'A new photo every ten minutes.',
+    'Your apps in a floating dock.',
+    'About 16&nbsp;MB of <b class="hl">memory</b> on Home.',
+    'Just <b class="hl">12&nbsp;MB</b> while you watch something else.',
+    'Arranged from your remote: move, hide, dock.',
+    'Updates show their progress right on the app.',
+    'No accounts, no ads, no trackers.',
+  ];
+  const full = document.createElement('span');                 // for screen readers
+  full.className = 'sr-only'; full.textContent = p.textContent;
+  p.before(full);
+  p.setAttribute('aria-hidden', 'true');
+  p.classList.add('facts');
   const caret = document.createElement('span');
-  caret.className = 'caret'; caret.setAttribute('aria-hidden', 'true');
-  p.prepend(caret);
-  let i = 0;
-  const step = () => {
-    if (i >= chars.length) { setTimeout(() => caret.remove(), 1800); return; }
-    const c = chars[i++];
-    c.classList.add('on'); c.after(caret);
-    const ch = c.textContent, next = chars[i] && chars[i].textContent;
-    setTimeout(step, ch === '.' && next === ' ' ? 520 : ch === ',' ? 150 : 16 + Math.random() * 14);
-  };
-  setTimeout(step, 450);
+  caret.className = 'caret';
+  const wait = ms => new Promise(r => setTimeout(r, ms));
+  async function show(html) {
+    p.innerHTML = '<span class="fact">' + html + '</span>';
+    const line = p.firstChild, chars = [];
+    const wrap = node => {
+      for (const n of [...node.childNodes]) {
+        if (n.nodeType !== 3) { wrap(n); continue; }
+        const frag = document.createDocumentFragment();
+        for (const ch of n.textContent) { const s = document.createElement('span'); s.className = 'ch'; s.textContent = ch; frag.appendChild(s); chars.push(s); }
+        n.replaceWith(frag);
+      }
+    };
+    wrap(line);
+    line.prepend(caret);
+    for (const c of chars) { c.classList.add('on'); c.after(caret); await wait(c.textContent === ',' || c.textContent === ':' ? 140 : 24 + Math.random() * 18); }
+    await wait(2300);                                            // let it be read
+    for (let i = chars.length - 1; i >= 0; i--) { chars[i].classList.remove('on'); chars[i].before(caret); await wait(11); }
+    await wait(260);
+  }
+  (async () => { await wait(400); for (let i = 0; ; i = (i + 1) % FACTS.length) await show(FACTS[i]); })();
 })();
 </script>
 </body>
