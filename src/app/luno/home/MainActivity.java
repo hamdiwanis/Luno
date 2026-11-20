@@ -96,6 +96,10 @@ public class MainActivity extends Activity {
     private boolean ssidBusy;
     private long processLimitAt;
     private Updates updates;
+    /** Updates.version() when the cards of new installs were last laid out. */
+    private int installsShown = -1;
+    /** installsSig() of the new installs' cards laid out. */
+    private String installsLaid = "";
     private Bluetooth bluetooth;
     private View btChip;
     private TextView btName;
@@ -125,6 +129,9 @@ public class MainActivity extends Activity {
         Drawable art;      // shown-size bitmap, made on demand (artFor) and dropped when not needed
         boolean banner;
         ResolveInfo ri;
+        /** Not installed yet: a card shown while it installs, with the installer's icon. */
+        boolean installing;
+        Bitmap icon;
     }
 
     // ---------------------------------------------------------------- lifecycle
@@ -533,6 +540,11 @@ public class MainActivity extends Activity {
     // ---------------------------------------------------------------- apps
 
     private void buildApps() {
+        // Rebuilding drops the focused card: focus the same app again after (in the dock or the list).
+        View had = getCurrentFocus();
+        boolean hadDock = dockTiles.contains(had), hadSheet = sheetTiles.contains(had);
+        String hadPkg = (hadDock || hadSheet) && had.getTag() instanceof App ? ((App) had.getTag()).pkg : null;
+        int hadIndex = hadDock ? dockTiles.indexOf(had) : sheetTiles.indexOf(had);
         PackageManager pm = getPackageManager();
         android.content.pm.ChangedPackages changed = pm.getChangedPackages(packageSeq);
         if (changed != null) packageSeq = changed.getSequenceNumber();
@@ -552,6 +564,13 @@ public class MainActivity extends Activity {
             allApps.add(a);
         }
         Collections.sort(allApps, (x, y) -> x.label.compareToIgnoreCase(y.label));
+        // Apps installing for the first time get a card now, where the app will be once installed.
+        if (updates != null) {
+            installsShown = updates.version();
+            List<App> fresh = newInstalls();
+            installsLaid = installsSig(fresh);
+            for (App a : fresh) byPkg.put(a.pkg, a);
+        }
         List<App> inDock = new ArrayList<>();
         for (String p : dockApps) if (byPkg.containsKey(p)) inDock.add(byPkg.remove(p));
         List<App> rest = new ArrayList<>();
@@ -605,12 +624,49 @@ public class MainActivity extends Activity {
         releaseSheet();
         if (sheet.getVisibility() == View.VISIBLE) buildSheet(sheetApps);
         lastDockIndex = Math.min(lastDockIndex, Math.max(0, dockTiles.size() - 1));
+        if (hadPkg != null) {
+            List<View> tiles = hadDock ? dockTiles : sheetTiles;
+            View again = null;
+            for (View t : tiles) if (t.getTag() instanceof App && hadPkg.equals(((App) t.getTag()).pkg)) again = t;
+            if (again == null && !tiles.isEmpty()) again = tiles.get(Math.max(0, Math.min(hadIndex, tiles.size() - 1)));
+            if (again != null) again.requestFocus();
+        }
         showUpdates();
+    }
+
+    /** Apps being installed that aren't on the TV yet (not updates, not hidden ones). */
+    private List<App> newInstalls() {
+        List<App> out = new ArrayList<>();
+        PackageManager pm = getPackageManager();
+        for (Map.Entry<String, Object[]> e : updates.apps().entrySet()) {
+            String pkg = e.getKey();
+            if (hidden.contains(pkg) || userHidden.contains(pkg)) continue;
+            try {
+                pm.getApplicationInfo(pkg, 0);
+                continue; // installed: an update, shown on its own card
+            } catch (PackageManager.NameNotFoundException notYet) { }
+            App a = new App();
+            a.pkg = pkg;
+            a.label = e.getValue()[0] != null ? (String) e.getValue()[0] : "New app";
+            a.icon = (Bitmap) e.getValue()[1];
+            a.installing = true;
+            out.add(a);
+        }
+        return out;
     }
 
     /** Darkens the cards of apps being updated, with "Updating" and their progress; clears the rest. */
     private void showUpdates() {
         if (updates == null) return;
+        if (updates.version() != installsShown) {
+            // An install started or ended, or got its name or icon: lay the cards out again when
+            // that changes the new apps' cards (buildApps calls back here).
+            installsShown = updates.version();
+            if (!installsSig(newInstalls()).equals(installsLaid)) {
+                buildApps();
+                return;
+            }
+        }
         boolean any = updates.any();
         for (List<View> tiles : Arrays.asList(dockTiles, sheetTiles)) {
             for (View t : tiles) {
@@ -621,10 +677,11 @@ public class MainActivity extends Activity {
                     View c = card.getChildAt(i);
                     if (c instanceof Updates.Overlay && c.getTag() == null) o = (Updates.Overlay) c; // tagged: fading out
                 }
-                float p = any ? updates.of(((App) t.getTag()).pkg) : -1;
+                App app = (App) t.getTag();
+                float p = any ? updates.of(app.pkg) : -1;
                 if (p >= 0) {
                     if (o == null) {
-                        o = new Updates.Overlay(this, sansMedium());
+                        o = new Updates.Overlay(this, sansMedium(), app.installing ? "Installing" : "Updating");
                         card.addView(o, full());
                     }
                     o.setProgress(p);
@@ -668,6 +725,14 @@ public class MainActivity extends Activity {
         showUpdates();
     }
 
+    /** What the new installs' cards show: package, name and whether there's an icon, in any order. */
+    private static String installsSig(List<App> apps) {
+        List<String> parts = new ArrayList<>();
+        for (App a : apps) parts.add(a.pkg + "|" + a.label + "|" + (a.icon != null));
+        Collections.sort(parts);
+        return parts.toString();
+    }
+
     /** Drops the sheet's tiles and their art; it's rebuilt the next time it opens. */
     private void releaseSheet() {
         if (sheet.getVisibility() == View.VISIBLE) return;
@@ -682,6 +747,12 @@ public class MainActivity extends Activity {
      */
     private Drawable artFor(App a) {
         if (a.art != null) return a.art;
+        if (a.installing) { // the installer's icon (the app's banner comes with the app)
+            a.banner = false;
+            a.art = a.icon != null ? new android.graphics.drawable.BitmapDrawable(getResources(), a.icon)
+                    : new android.graphics.drawable.ColorDrawable(Color.TRANSPARENT);
+            return a.art;
+        }
         if (a.pkg.startsWith("org.smarttube.")) {
             a.banner = true;
             int w = artWidth();
@@ -808,6 +879,7 @@ public class MainActivity extends Activity {
         }
         TextView label = name;
         card.setOnClickListener(v -> {
+            if (app.installing) return; // nothing to open until it's installed
             opened(app.pkg);
             launch(new Intent(Intent.ACTION_MAIN)
                     .addCategory(Intent.CATEGORY_LEANBACK_LAUNCHER)
@@ -829,7 +901,7 @@ public class MainActivity extends Activity {
             } else if (has) {
                 if (listMode) {
                     showTitle(app.label);
-                    showGlow(v, app);
+                    if (!app.installing) showGlow(v, app);
                 }
                 scrollSheetTo(box);
             }
@@ -838,7 +910,7 @@ public class MainActivity extends Activity {
         card.setOnLongClickListener(v -> {
             // Holding OK fires this twice (our key-repeat check and the view's own long-press
             // timer); a second menu would sit under the first and need its own click to close.
-            if (movingPkg != null || popup != null) return true;
+            if (movingPkg != null || popup != null || app.installing) return true;
             List<String> labels = new ArrayList<>();
             List<Runnable> acts = new ArrayList<>();
             // Apps in the list can't be moved while it's ordered by recent use.
@@ -931,7 +1003,11 @@ public class MainActivity extends Activity {
             hideGlow();
             sheet.setVisibility(View.GONE);
             sheetTitle.setVisibility(View.VISIBLE);
+            sheetTitle.animate().cancel();
+            sheetTitle.setAlpha(1f);
+            sheetTitle.setTranslationY(0);
             sheetTitle.setText("Apps");
+            titleWanted = "Apps";
             sheetTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 22);
             setTitleTop(dp(40));
             sl.bottomMargin = 0;
@@ -985,7 +1061,7 @@ public class MainActivity extends Activity {
         if (washRendering || !listMode) return;
         List<App> todo = new ArrayList<>();
         for (App a : sheetApps) {
-            if (washCache.containsKey(a.pkg)) continue;
+            if (washCache.containsKey(a.pkg) || a.installing) continue;
             if (a.pkg.equals(glowPkg)) todo.add(0, a); else todo.add(a);
         }
         if (todo.isEmpty()) return;
@@ -1063,8 +1139,14 @@ public class MainActivity extends Activity {
     }
 
     /** The apps-list title: the old name fades out and down, the new one fades in and rises. */
+    /** The title last asked for (the shown one may still be fading to it). */
+    private String titleWanted;
+
     private void showTitle(CharSequence name) {
-        if (name.toString().contentEquals(sheetTitle.getText()) && sheetTitle.getAlpha() > 0.99f) return;
+        // Compared with the title last asked for, not the one on screen: asking back for the shown
+        // title while it fades out to another must still bring it back.
+        if (name.toString().equals(titleWanted)) return;
+        titleWanted = name.toString();
         sheetTitle.animate().cancel();
         sheetTitle.animate().alpha(0f).translationY(dp(6)).setDuration(110).withEndAction(() -> {
             sheetTitle.setText(name);

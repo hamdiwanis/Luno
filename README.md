@@ -21,8 +21,9 @@ about 16 MB of its own memory on Home and 12 MB while another app is in front.
 - **Two homes** (Features > Home): **Photo**, the photo with the dock, or **Apps list**, no photo, every
   app as a banner in one grid, the focused app's name large at the bottom and the lower screen washed
   in its colours. The apps list uses about half the memory (about 13 MB).
-- **Updates shown on the apps**: an app being installed or updated (Play Store or any other) is
-  darkened, with "Updating" and its progress, until it's done.
+- **Installs and updates shown on the apps**: an app being updated (Play Store or any other) is
+  darkened, with "Updating" and its progress, until it's done; a new app gets its card at once,
+  with "Installing" and its progress.
 - **Hide apps**: hold OK on an app and choose Hide; Features > Hidden apps brings it back.
 - **Features menu** (top bar, or the remote's Menu key), in three parts:
   - *Home screen*: the home style, the apps order (yours, or recently used first) and hidden apps.
