@@ -25,6 +25,8 @@ about 16 MB of its own memory on Home and 12 MB while another app is in front.
   darkened, with "Updating" and its progress, until it's done; a new app gets its card at once,
   with "Installing" and its progress.
 - **Hide apps**: hold OK on an app and choose Hide; Features > Hidden apps brings it back.
+- **App info and Uninstall**: hold OK on an app to open its page in the TV's settings, or uninstall
+  it (apps you installed, and updates to built-in ones).
 - **Features menu** (top bar, or the remote's Menu key), in three parts:
   - *Home screen*: the home style, the apps order (yours, or recently used first) and hidden apps.
   - *TV*: an app to open when the TV turns on (or the last one used), a sleep timer (15 minutes to

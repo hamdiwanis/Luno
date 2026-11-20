@@ -7,6 +7,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.ActivityInfo;
+import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.graphics.Bitmap;
@@ -19,6 +20,7 @@ import android.graphics.drawable.GradientDrawable;
 import android.net.ConnectivityManager;
 import android.net.Network;
 import android.net.NetworkCapabilities;
+import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -919,6 +921,13 @@ public class MainActivity extends Activity {
             else if (!listMode) { labels.add("Add to dock"); acts.add(() -> addToDock(app.pkg)); }
             labels.add("Hide");
             acts.add(() -> hideApp(app.pkg, inDock));
+            labels.add("App info");
+            acts.add(() -> launch(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                    Uri.fromParts("package", app.pkg, null))));
+            if (removable(app.pkg)) {
+                labels.add("Uninstall");
+                acts.add(() -> launch(new Intent(Intent.ACTION_DELETE, Uri.fromParts("package", app.pkg, null))));
+            }
             showActions(v, labels.toArray(new String[0]), acts.toArray(new Runnable[0]));
             return true;
         });
@@ -1215,6 +1224,17 @@ public class MainActivity extends Activity {
         // Apps list: scroll only as far as needed to show the row whole; sheet: row near the top.
         int target = listMode ? row.getBottom() + dp(40) - sheetScroll.getHeight() : row.getTop() - dp(40);
         sheetScroll.smoothScrollTo(0, Math.max(0, target));
+    }
+
+    /** Apps the user installed (or updates to built-in ones, which Uninstall rolls back). */
+    private boolean removable(String pkg) {
+        try {
+            int flags = getPackageManager().getApplicationInfo(pkg, 0).flags;
+            return (flags & ApplicationInfo.FLAG_SYSTEM) == 0
+                    || (flags & ApplicationInfo.FLAG_UPDATED_SYSTEM_APP) != 0;
+        } catch (PackageManager.NameNotFoundException e) {
+            return false;
+        }
     }
 
     private void launch(Intent i) {
