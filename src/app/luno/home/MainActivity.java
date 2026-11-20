@@ -241,6 +241,7 @@ public class MainActivity extends Activity {
             homeContent(true);
         }
         releaseSheet();
+        SelfUpdate.maybeCheck(this); // while another app is in front, so Home's restart isn't seen
     }
 
     @Override
@@ -1516,6 +1517,14 @@ public class MainActivity extends Activity {
             first = false;
             menuRow(list, rows, featureText(label, enabled(pkg)), r -> toggleFeature(r, pkg, label));
         }
+
+        section(list, "Luno", false);
+        String version = "Version " + SelfUpdate.version(this);
+        menuRow(list, rows, version + "  ·  Check for updates", r -> {
+            if (!SelfUpdate.checkNow(this, status -> runOnUiThread(() -> r.setText(version + "  ·  " + status)))) {
+                r.setText(version + "  ·  Checking…");
+            }
+        });
         linkRows(rows);
         showMenu(pw, width);
         rows.get(Math.max(0, Math.min(focusRow, rows.size() - 1))).requestFocus();
@@ -1591,11 +1600,31 @@ public class MainActivity extends Activity {
         }
     }
 
-    /** Shows a menu under the Features button, right-aligned with it. */
+    /**
+     * Shows a menu under the Features button, right-aligned with it. Taller than the screen below
+     * (a TV with many background apps): it scrolls, following the focused row.
+     */
     private void showMenu(PopupWindow pw, int width) {
         pw.setOutsideTouchable(true);
         pw.setElevation(dp(16));
         View anchor = featuresBtn;
+        View panel = pw.getContentView();
+        int[] at = new int[2];
+        anchor.getLocationOnScreen(at);
+        int room = root.getHeight() - (at[1] + anchor.getHeight() + dp(12)) - dp(24);
+        panel.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY), View.MeasureSpec.UNSPECIFIED);
+        if (panel.getMeasuredHeight() > room) {
+            ScrollView scroll = new ScrollView(this);
+            scroll.setVerticalScrollBarEnabled(false);
+            scroll.setVerticalFadingEdgeEnabled(true); // also keeps a margin past the focused row
+            scroll.setFadingEdgeLength(dp(24));
+            scroll.setBackground(panel.getBackground()); // the rounded panel stays put; rows scroll in it
+            scroll.setClipToOutline(true);
+            panel.setBackground(null);
+            scroll.addView(panel);
+            pw.setContentView(scroll);
+            pw.setHeight(room);
+        }
         pw.setOnDismissListener(() -> { popup = null; anchor.requestFocus(); });
         popup = pw;
         pw.showAsDropDown(anchor, anchor.getWidth() - width, dp(12));

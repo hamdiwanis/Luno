@@ -32,12 +32,16 @@ about 16 MB of its own memory on Home and 12 MB while another app is in front.
   - *TV*: an app to open when the TV turns on (or the last one used), a sleep timer (15 minutes to
     2 hours) and memory: how much is in use, with a bar; choose it to close background apps.
   - *Background apps*: switch apps such as Chromecast, screen mirroring or TV Guard on and off.
+  - *Luno*: the version you have; choose it to check for an update and install it now.
 - **Network name** shown without turning Location on, and a **Bluetooth** device's name while one
   is connected.
 - **Background limit**: keeps Android's cached-app limit (1 by default) set, as Google's flag sync
   wipes it.
+- **Updates itself**: when you open another app, at most every six hours, Luno checks the latest
+  release here and installs it with no prompt (the APK must match the SHA-256 in the release notes).
+  Home comes back as the new version the next time you open it. Features > Luno checks right away.
 
-The Features menu, network name, sleep timer and background limit use the TV's own adb (network debugging on
+The Features menu, network name, sleep timer, background limit and updates use the TV's own adb (network debugging on
 `127.0.0.1:5555`). The first time, the TV asks "Allow USB debugging?" for Luno's key: tick
 **Always allow** and press **Allow**.
 

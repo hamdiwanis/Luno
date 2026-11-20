@@ -5,7 +5,9 @@ import android.util.Base64;
 
 import java.io.DataInputStream;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStream;
 import java.math.BigInteger;
 import java.net.InetSocketAddress;
@@ -20,6 +22,7 @@ import java.security.KeyPairGenerator;
 import java.security.interfaces.RSAPublicKey;
 import java.security.spec.PKCS8EncodedKeySpec;
 import java.security.spec.X509EncodedKeySpec;
+import java.util.Arrays;
 
 import javax.crypto.Cipher;
 
@@ -27,7 +30,7 @@ import javax.crypto.Cipher;
  * A minimal ADB client for the TV's own adbd (network debugging, 127.0.0.1:5555). Shell commands
  * run as the shell user, which may enable and disable apps; an installed app can't do that itself.
  * The first connection makes the TV ask "Allow network debugging?" for this launcher's key: tick
- * "Always allow". The key lives in the launcher's private files.
+ * "Always allow". The key lives in the launcher's private files. Also installs Luno's own updates.
  */
 final class LocalAdb {
     private static final int CNXN = 0x4e584e43, AUTH = 0x48545541, OPEN = 0x4e45504f,
@@ -41,38 +44,99 @@ final class LocalAdb {
 
     /** Runs a shell command and returns its output. Blocks; call off the main thread. */
     static String shell(Context ctx, String command) throws Exception {
-        KeyPair key = key(ctx);
-        try (Socket s = new Socket()) {
-            s.connect(new InetSocketAddress("127.0.0.1", 5555), 3000);
-            s.setSoTimeout(60_000); // long enough to accept the TV's prompt the first time
-            DataInputStream in = new DataInputStream(s.getInputStream());
-            OutputStream out = s.getOutputStream();
+        try (Conn c = connect(ctx, true)) {
+            c.open("shell:" + command);
+            return c.readToClose();
+        }
+    }
 
-            send(out, CNXN, 0x01000000, 4096, "host::luno\0".getBytes(StandardCharsets.UTF_8));
-            boolean signed = false;
-            while (true) {
-                Msg m = read(in);
-                if (m.cmd == CNXN) break;
-                if (m.cmd != AUTH || m.arg0 != AUTH_TOKEN) continue;
-                if (!signed) {
-                    send(out, AUTH, AUTH_SIGNATURE, 0, sign(key, m.data));
-                    signed = true;
-                } else {
-                    send(out, AUTH, AUTH_RSAPUBLICKEY, 0, publicKey(key));
+    /**
+     * Installs an APK as the shell user, with no prompt (streams it to "cmd package install").
+     * Only over a connection the TV already trusts: never asks "Allow network debugging?", since
+     * this runs in the background. Returns pm's output ("Success" when it worked).
+     */
+    static String install(Context ctx, File apk) throws Exception {
+        try (Conn c = connect(ctx, false); InputStream data = new FileInputStream(apk)) {
+            c.open("exec:cmd package install -S " + apk.length());
+            byte[] buf = new byte[Math.min(c.maxData, 64 * 1024)];
+            StringBuilder output = new StringBuilder();
+            for (int n; (n = data.read(buf)) > 0; ) {
+                send(c.out, WRTE, 1, c.remote, Arrays.copyOf(buf, n));
+                while (true) { // each write waits for its OKAY; pm may write meanwhile
+                    Msg m = read(c.in);
+                    if (m.cmd == OKAY) break;
+                    if (m.cmd == CLSE) return output.toString();
+                    if (m.cmd == WRTE) c.ack(m, output);
                 }
             }
+            return output.append(c.readToClose()).toString();
+        }
+    }
 
-            send(out, OPEN, 1, 0, ("shell:" + command + "\0").getBytes(StandardCharsets.UTF_8));
+    /** The TV doesn't trust Luno's key yet (and wasn't asked to). */
+    static final class NotTrusted extends IOException { }
+
+    /** An authenticated connection to the TV's adbd, with at most one stream open. */
+    private static final class Conn implements AutoCloseable {
+        final Socket socket = new Socket();
+        DataInputStream in;
+        OutputStream out;
+        int maxData = 4096, remote;
+
+        void open(String service) throws IOException {
+            send(out, OPEN, 1, 0, (service + "\0").getBytes(StandardCharsets.UTF_8));
+            while (true) {
+                Msg m = read(in);
+                if (m.cmd == OKAY) { remote = m.arg0; return; }
+                if (m.cmd == CLSE) throw new IOException("adb refused " + service);
+            }
+        }
+
+        void ack(Msg m, StringBuilder output) throws IOException {
+            output.append(new String(m.data, StandardCharsets.UTF_8));
+            send(out, OKAY, 1, m.arg0, new byte[0]);
+        }
+
+        String readToClose() throws IOException {
             StringBuilder output = new StringBuilder();
             while (true) {
                 Msg m = read(in);
-                if (m.cmd == WRTE) {
-                    output.append(new String(m.data, StandardCharsets.UTF_8));
-                    send(out, OKAY, 1, m.arg0, new byte[0]);
-                } else if (m.cmd == CLSE) {
-                    return output.toString();
+                if (m.cmd == WRTE) ack(m, output);
+                else if (m.cmd == CLSE) return output.toString();
+            }
+        }
+
+        @Override public void close() throws IOException { socket.close(); }
+    }
+
+    /** Connects and authenticates; without allowPrompt, fails rather than make the TV ask. */
+    private static Conn connect(Context ctx, boolean allowPrompt) throws Exception {
+        KeyPair key = key(ctx);
+        Conn c = new Conn();
+        try {
+            c.socket.connect(new InetSocketAddress("127.0.0.1", 5555), 3000);
+            c.socket.setSoTimeout(60_000); // long enough to accept the TV's prompt the first time
+            c.in = new DataInputStream(c.socket.getInputStream());
+            c.out = c.socket.getOutputStream();
+
+            send(c.out, CNXN, 0x01000000, 4096, "host::luno\0".getBytes(StandardCharsets.UTF_8));
+            boolean signed = false;
+            while (true) {
+                Msg m = read(c.in);
+                if (m.cmd == CNXN) { c.maxData = m.arg1; return c; }
+                if (m.cmd != AUTH || m.arg0 != AUTH_TOKEN) continue;
+                if (!signed) {
+                    send(c.out, AUTH, AUTH_SIGNATURE, 0, sign(key, m.data));
+                    signed = true;
+                } else if (allowPrompt) {
+                    send(c.out, AUTH, AUTH_RSAPUBLICKEY, 0, publicKey(key));
+                } else {
+                    throw new NotTrusted();
                 }
             }
+        } catch (Exception e) {
+            c.close();
+            throw e;
         }
     }
 
