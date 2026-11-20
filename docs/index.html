@@ -334,7 +334,7 @@ footer a{color:var(--muted)}
       <div class="step"><h3>Download the APK</h3><p>From the <a href="https://github.com/hamdiwanis/Luno/releases/latest">latest release</a> on GitHub. Android 9 or later.</p></div>
       <div class="step"><h3>Install it and make it your home</h3><p>With adb, using your TV's address:</p>
 <pre><button class="copy" type="button">Copy</button>adb connect 192.168.1.20:5555
-adb install luno-1.1.apk
+adb install luno-1.2.apk
 adb shell cmd package set-home-activity --user 0 app.luno.home/.MainActivity</pre></div>
       <div class="step"><h3>Turn off the stock home</h3><p>Google TV has no home picker, so the stock launcher has to step aside. <code>debloat.sh</code> in the repo does it, along with the TV's promotions and preloaded apps, and can undo it all.</p>
 <pre><button class="copy" type="button">Copy</button>TV=192.168.1.20:5555 ./debloat.sh --dry-run   <span class="c"># see what would change</span>
