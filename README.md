@@ -47,7 +47,7 @@ System > Developer options), then from a computer with adb:
 
 ```bash
 adb connect 192.168.1.20:5555                 # your TV's address
-adb install luno-1.0.apk
+adb install luno-1.1.apk
 adb shell cmd package set-home-activity --user 0 app.luno.home/.MainActivity
 ```
 
